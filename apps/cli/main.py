@@ -349,6 +349,37 @@ def handle_runtime_cli(args: list[str]):
             console.print("[dim]Use 'rio runtime permissions --set <capability> true|false' to toggle.[/dim]\n")
 
 
+def handle_voice_cli(args: list[str]):
+    """Handle 'rio voice' subcommands."""
+    subcmd = args[0].lower() if args else "status"
+
+    if subcmd == "status":
+        from voice.permissions import VoicePermissionManager
+        vpm = VoicePermissionManager()
+        has_mic = vpm.has_microphone_permission()
+        console.print("\n[bold cyan]🎙️ R.I.O. Voice Subsystem Status[/bold cyan]")
+        console.print(f"Microphone Capability (`microphone.read`): [{'green' if has_mic else 'red'}]{'ALLOWED' if has_mic else 'DENIED'}[/]")
+        console.print(f"Wake Words: [white]RIO, Hey RIO, OK RIO, Hello RIO, FRIDAY[/white]")
+        console.print(f"Transcription Engine: [white]Groq Whisper (whisper-large-v3-turbo)[/white]")
+        console.print("[dim]Commands: 'rio voice trigger \"<speech_text>\"', 'rio runtime permissions set microphone.read true'[/dim]\n")
+
+    elif subcmd == "trigger":
+        if len(args) < 2:
+            console.print("\n[yellow]Usage: rio voice trigger \"Hey RIO, open VS Code\"[/yellow]\n")
+            return
+        prompt_text = " ".join(args[1:])
+        from voice.manager import VoiceManager
+        vm = VoiceManager()
+        console.print(f"\n[bold cyan]🎙️ Simulating Voice Input:[/bold cyan] [italic]\"{prompt_text}\"[/italic]")
+        try:
+            res = asyncio.run(vm.execute_voice_command_text(prompt_text))
+            console.print(f"\n[bold green]R.I.O. Voice Response:[/bold green]\n{res.reply}\n")
+        except PermissionError as pe:
+            console.print(f"\n[bold red]❌ {pe}[/bold red]\n")
+        except Exception as e:
+            console.print(f"\n[bold red]❌ Voice execution failed: {e}[/bold red]\n")
+
+
 def main():
     """Main CLI Entry Point."""
     raw_args = sys.argv[1:]
@@ -371,6 +402,11 @@ def main():
     # Check for 'runtime' subcommand
     if cleaned_args and cleaned_args[0].lower() == "runtime":
         handle_runtime_cli(cleaned_args[1:])
+        return
+
+    # Check for 'voice' subcommand
+    if cleaned_args and cleaned_args[0].lower() == "voice":
+        handle_voice_cli(cleaned_args[1:])
         return
 
     parser = argparse.ArgumentParser(description="R.I.O. (Reasoning Intelligence Orchestration) CLI")

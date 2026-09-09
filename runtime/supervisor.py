@@ -22,8 +22,9 @@ from runtime.device_manager import DeviceManager
 from runtime.event_listener import EventListener, RuntimeEvent
 from runtime.health import RuntimeHealth
 from runtime.heartbeat import HeartbeatManager
-from runtime.permissions import PermissionManager
+from runtime.permissions import Capability, PermissionManager
 from runtime.tray import SystemTrayManager
+from voice.manager import VoiceManager
 
 logger = logging.getLogger("rio.runtime.supervisor")
 
@@ -37,6 +38,7 @@ class RuntimeSupervisor:
         auth_token: Optional[str] = None,
         heartbeat_interval: float = 20.0,
         enable_tray: bool = True,
+        enable_voice: bool = True,
     ):
         self.device_manager = DeviceManager()
         self.permission_manager = PermissionManager()
@@ -49,7 +51,14 @@ class RuntimeSupervisor:
 
         self.computer_agent = ComputerAgent()
         self.enable_tray = enable_tray
+        self.enable_voice = enable_voice
         self.tray_manager: Optional[SystemTrayManager] = None
+        self.voice_manager: Optional[VoiceManager] = None
+        if self.enable_voice:
+            self.voice_manager = VoiceManager(
+                permission_manager=self.permission_manager,
+                event_listener=self.event_listener,
+            )
 
         self.connection_manager = ConnectionManager(
             device_manager=self.device_manager,
@@ -147,6 +156,13 @@ class RuntimeSupervisor:
         # Start Heartbeat
         self.heartbeat_manager.start()
 
+        # Start Voice Interface (if enabled and permitted)
+        if self.enable_voice and self.voice_manager:
+            if self.permission_manager.is_permitted(Capability.MICROPHONE_READ):
+                await self.voice_manager.start()
+            else:
+                logger.info("🎙️ Voice interface disabled by permission boundary ('microphone.read' is false).")
+
         # Start System Tray (if enabled)
         if self.enable_tray:
             self.tray_manager = SystemTrayManager(
@@ -165,6 +181,8 @@ class RuntimeSupervisor:
 
         # Clean Shutdown Sequence
         logger.info("🛑 Executing clean runtime shutdown sequence...")
+        if self.voice_manager:
+            await self.voice_manager.stop()
         self.heartbeat_manager.stop()
         self.connection_manager.stop()
         if self.tray_manager:
