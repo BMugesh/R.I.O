@@ -126,58 +126,30 @@ class DesktopAgent:
 
             # 3. Application Management (e.g. VS Code, Chrome, WhatsApp, Notepad)
             elif action in ("open_application", "launch_app"):
-                import shutil
-                app_name = params.get("app_name", "").strip()
-                app_lower = app_name.lower()
-                cmd = None
-                if any(k in app_lower for k in ("code", "vscode", "vs code")):
-                    resolved = shutil.which("code") or shutil.which("code.cmd")
-                    if not resolved:
-                        local_appdata = os.getenv("LOCALAPPDATA", "")
-                        candidate = os.path.join(local_appdata, "Programs", "Microsoft VS Code", "Code.exe")
-                        if os.path.exists(candidate):
-                            resolved = candidate
-                    cmd = [resolved] if resolved else ["code"]
-                elif "chrome" in app_lower:
-                    resolved = shutil.which("chrome")
-                    if not resolved:
-                        for c_path in (
-                            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                            os.path.join(os.getenv("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                        ):
-                            if os.path.exists(c_path):
-                                resolved = c_path
-                                break
-                    cmd = [resolved] if resolved else (["start", "chrome"] if platform.system() == "Windows" else ["google-chrome"])
-                elif "whatsapp" in app_lower:
-                    cmd = ["start", "whatsapp:"] if platform.system() == "Windows" else (["open", "-a", "WhatsApp"] if platform.system() == "Darwin" else ["xdg-open", "whatsapp:"])
-                elif "notepad" in app_lower:
-                    cmd = ["notepad"]
-                elif "calc" in app_lower:
-                    cmd = ["calc"]
-                elif "browser" in app_lower or "edge" in app_lower:
-                    cmd = ["start", "msedge"] if platform.system() == "Windows" else ["xdg-open", "https://google.com"]
-                else:
-                    cmd = [app_name]
-
-                pid = None
-                launched = False
-                if cmd:
-                    try:
-                        cmd_to_run = " ".join(cmd) if (platform.system() == "Windows" and cmd[0] == "start") else cmd
-                        p = subprocess.Popen(cmd_to_run, shell=(platform.system() == "Windows"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        pid = p.pid
-                        launched = True
-                    except Exception as e:
-                        logger.warning(f"Could not spawn command {cmd}: {e}")
-
+                from runtime.validator import WindowsAppValidator
+                app_name = params.get("app_name", "").strip() or params.get("target", "Notepad")
+                val_res = await WindowsAppValidator.validate_application(app_name, close_after=False, verification_timeout=2.0)
+                is_verified = val_res.status == "VERIFIED"
+                
                 return DeviceObservation(
                     command_id=command.command_id,
                     device_id=self.device_id,
-                    success=True,
+                    success=is_verified or val_res.installed,
                     action=action,
-                    data={"app_name": app_name, "window_state": "focused", "process_id": pid or 1234, "launched": launched, "window_open": True, "verified": True},
+                    status="verified" if is_verified else ("uncertain" if val_res.status == "UNCERTAIN" else "failed"),
+                    data={
+                        "app_name": app_name,
+                        "window_state": "focused" if is_verified else "unknown",
+                        "process_id": val_res.pid or 1234,
+                        "launched": val_res.installed,
+                        "window_open": is_verified,
+                        "window_title": val_res.window_title,
+                        "window_handle": val_res.window_handle,
+                        "verified": is_verified,
+                        "verification_layer": val_res.verification_layer,
+                        "details": val_res.details,
+                    },
+                    error=val_res.error_message if not is_verified and val_res.status != "UNCERTAIN" else None,
                 )
 
 

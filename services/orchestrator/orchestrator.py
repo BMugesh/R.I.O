@@ -15,6 +15,7 @@ from packages.schemas.chat import ChatRequest, ChatResponse, DeveloperTrace
 from packages.schemas.events import EventType, RIOEvent
 from packages.schemas.input import InputType, RIOInput
 from packages.schemas.tasks import Task, TaskPlan, TaskStatus
+from services.device_router.router import DeviceRouter
 from services.memory.memory_manager import MemoryManager
 from services.model_router.router import ModelRouter
 from services.orchestrator.context_engine import ContextEngine
@@ -25,7 +26,9 @@ from services.orchestrator.intent_engine import IntentEngine
 from services.orchestrator.response_engine import ResponseEngine
 from services.safety.approval_engine import ApprovalEngine
 from services.safety.policy_engine import PolicyEngine
+from services.scheduler.scheduler import ScheduledTaskState, TaskScheduler
 from services.verification.engine import VerificationEngine
+from packages.schemas.devices import OriginContext
 
 logger = logging.getLogger("rio.orchestrator")
 
@@ -40,6 +43,8 @@ class RIOOrchestrator:
         policy_engine: Optional[PolicyEngine] = None,
         approval_engine: Optional[ApprovalEngine] = None,
         verification_engine: Optional[VerificationEngine] = None,
+        device_router: Optional[DeviceRouter] = None,
+        scheduler: Optional[TaskScheduler] = None,
         event_callback: Optional[Callable[[RIOEvent], Any]] = None,
     ):
         self.model_router = model_router or ModelRouter()
@@ -47,12 +52,18 @@ class RIOOrchestrator:
         self.policy_engine = policy_engine or PolicyEngine()
         self.approval_engine = approval_engine or ApprovalEngine()
         self.verification_engine = verification_engine or VerificationEngine()
+        self.device_router = device_router or DeviceRouter()
+        self.scheduler = scheduler or TaskScheduler()
         self.event_callback = event_callback
 
         self.input_processor = InputProcessor()
         self.context_engine = ContextEngine(memory_manager=self.memory_manager)
         self.intent_engine = IntentEngine(model_router=self.model_router)
-        self.dag_planner = DAGPlanner(policy_engine=self.policy_engine, model_router=self.model_router)
+        self.dag_planner = DAGPlanner(
+            policy_engine=self.policy_engine,
+            model_router=self.model_router,
+            device_router=self.device_router,
+        )
         self.execution_engine = ExecutionEngine(
             approval_engine=self.approval_engine,
             verification_engine=self.verification_engine,
@@ -72,12 +83,28 @@ class RIOOrchestrator:
         session_id = request.session_id or "default_session"
         user_id = request.user_id or "default_user"
 
-        # 1. Normalize Input
+        # 1. Assemble Origin Context & Normalize Input
+        origin_ctx = request.origin_context
+        if not origin_ctx:
+            orig_dev = request.origin_device_id or request.device_id
+            itype = request.interface_type or ("cli" if "cli" in session_id.lower() else "web")
+            origin_ctx = OriginContext(
+                session_id=session_id,
+                interface_type=itype,
+                origin_device_id=orig_dev,
+            )
+
         rio_input = self.input_processor.process_raw(
             raw_payload=request.message,
             input_type=request.input_type,
-            source="web_chat",
-            metadata={"session_id": session_id, "user_id": user_id, "device_id": request.device_id},
+            source=str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
+            metadata={
+                "session_id": session_id,
+                "user_id": user_id,
+                "device_id": origin_ctx.origin_device_id,
+                "interface_type": str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
+                "origin_context": origin_ctx,
+            },
         )
 
         # 2. Context Engine Assembly & Short-term recall
@@ -91,6 +118,9 @@ class RIOOrchestrator:
 
         # 4. Handle Execution / Task Planning
         if intent_info.get("is_task", False):
+            import re
+            m_sched = re.search(r"\bat\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\b|\bin\s+(\d+\s*(?:minutes?|hours?))\b", request.message, re.IGNORECASE)
+            
             # Generate DAG Plan
             plan = await self.dag_planner.create_plan(goal=request.message, context=context)
             task_obj = Task(
@@ -102,16 +132,37 @@ class RIOOrchestrator:
             )
             self._active_tasks[task_obj.id] = task_obj
 
-            # Execute Task Graph
-            task_obj = await self.execution_engine.execute_task(task_obj, context=context)
+            if m_sched:
+                time_str = m_sched.group(0).strip()
+                dev_res = (context or {}).get("device_resolution")
+                orig_id = (dev_res.origin_device_id if dev_res else None) or origin_ctx.origin_device_id or "phone-01"
+                exec_id = (dev_res.execution_device_id if dev_res else None) or orig_id
+                
+                sched_task = self.scheduler.schedule(
+                    goal=request.message,
+                    trigger_time_iso=time_str,
+                    origin_device_id=orig_id,
+                    execution_device_id=exec_id,
+                    plan=plan,
+                    metadata={"session_id": session_id, "user_id": user_id},
+                )
+                task_obj.metadata["scheduled_task_id"] = sched_task.id
+                task_obj.metadata["scheduled_time"] = time_str
+                task_obj.status = TaskStatus.PENDING
+                
+                device_label = "your phone" if "phone" in exec_id or "android" in exec_id else ("your laptop" if "laptop" in exec_id or "desktop" in exec_id else f"device {exec_id}")
+                reply_text = f"Scheduled: '{request.message}' {time_str} on {device_label}."
+            else:
+                # Execute Task Graph immediately
+                task_obj = await self.execution_engine.execute_task(task_obj, context=context)
 
-            # Synthesize verified natural response
-            reply_text = await self.response_engine.generate_response(
-                user_message=request.message,
-                task=task_obj,
-                context=context,
-                developer_mode=request.developer_mode,
-            )
+                # Synthesize verified natural response
+                reply_text = await self.response_engine.generate_response(
+                    user_message=request.message,
+                    task=task_obj,
+                    context=context,
+                    developer_mode=request.developer_mode,
+                )
         else:
             # Conversational path
             reply_text = await self.response_engine.generate_response(
@@ -129,10 +180,20 @@ class RIOOrchestrator:
         dev_trace = None
         if request.developer_mode:
             latency = (time.time() - start_time) * 1000
+            dev_resolution = (context or {}).get("device_resolution")
+            orig_id = (dev_resolution.origin_device_id if dev_resolution else None) or origin_ctx.origin_device_id
+            exec_id = (dev_resolution.execution_device_id if dev_resolution else None)
+            res_reason = (dev_resolution.reason if dev_resolution else None) or "default"
+            exp_override = (dev_resolution.explicit_override if dev_resolution else False)
+
             dev_trace = DeveloperTrace(
                 task_id=task_obj.id if task_obj else None,
                 agent_id=intent_info.get("agent_id"),
                 model_id=self.model_router.resolve_model(intent_info.get("category", "conversation")),
+                origin_device_id=orig_id,
+                execution_device_id=exec_id,
+                resolution_reason=res_reason,
+                explicit_override=exp_override,
                 plan=task_obj.plan if task_obj else None,
                 steps=task_obj.plan.steps if task_obj and task_obj.plan else [],
                 latency_ms=latency,
@@ -148,3 +209,4 @@ class RIOOrchestrator:
 
     def get_task(self, task_id: str) -> Optional[Task]:
         return self._active_tasks.get(task_id)
+

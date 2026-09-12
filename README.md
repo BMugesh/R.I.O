@@ -47,44 +47,62 @@ NATURAL USER RESPONSE
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start (Single Command)
 
-### 1. Prerequisites
-- Python 3.10+
-- Node.js 18+ and pnpm / npm
-- Docker & Docker Compose (optional, for Postgres + Redis)
-
-### 2. Setup Environment
+### 1. Prerequisites & Environment
 ```bash
 cp .env.example .env
 # Add your GROQ_API_KEY to .env
 ```
 
-### 3. Run with Docker Compose
-```bash
-docker-compose up -d
-```
-- Web UI: `http://localhost:3000`
-- API Gateway & Swagger Docs: `http://localhost:8000/docs`
-- Real-time WebSocket: `ws://localhost:8000/ws`
+### 2. Launch Everything with 1 Command
+Run the unified multi-process supervisor that launches the FastAPI Gateway, Laptop Background Runtime, Android Bridge, and Next.js Web UI simultaneously:
 
-### 4. Run Locally (Development)
-**Backend:**
 ```bash
-pip install -e .
-uvicorn apps.api.main:app --reload --port 8000
+python start_rio.py
 ```
-
-**Frontend:**
+*or via the R.I.O. CLI / batch scripts:*
 ```bash
-cd apps/web
-npm install
-npm run dev
+rio start                  # CLI unified start
+rio start --cli            # Start all services + launch interactive CLI shell
+./start.bat                # Windows CMD launcher
+./start.ps1                # Windows PowerShell launcher
 ```
 
-**Desktop Agent (Local Computer Control):**
+### 3. Service Access Points
+- 💻 **Web UI (Local Workstation):** `http://localhost:3000`
+- 📱 **Web UI (Mobile / Wi-Fi):** `http://<your-local-ip>:3000`
+- 📚 **Core API & Swagger Docs:** `http://localhost:8000/docs`
+- 🔌 **WebSocket Hub:** `ws://localhost:8000/ws`
+
+---
+
+## 🛠️ Individual Service Execution (Manual)
+If you prefer running services independently in separate terminals:
+
+**1. Backend Core Gateway:**
 ```bash
-python -m apps.desktop_agent.agent
+python -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+```
+
+**2. Laptop Background Runtime Daemon:**
+```bash
+python -m runtime.daemon
+```
+
+**3. Android Runtime Bridge Daemon:**
+```bash
+python -m runtime.android.daemon
+```
+
+**4. Next.js Web Frontend:**
+```bash
+cd apps/web && npm run dev
+```
+
+**5. Interactive CLI:**
+```bash
+rio
 ```
 
 ---

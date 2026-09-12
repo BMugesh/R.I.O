@@ -5,6 +5,7 @@ and connected device state into a unified reasoning context.
 """
 
 from typing import Any, Dict, List, Optional
+from packages.schemas.devices import OriginContext, InterfaceType
 from packages.schemas.input import RIOInput
 from packages.schemas.memory import MemoryItem
 from services.memory.memory_manager import MemoryManager
@@ -38,7 +39,18 @@ class ContextEngine:
                 limit=3,
             )
 
-        # 3. Assemble unified context dictionary
+        # 3. Assemble Origin Context
+        origin_ctx = rio_input.metadata.origin_context
+        if not origin_ctx:
+            orig_dev = rio_input.metadata.device_id or active_device_id
+            itype = rio_input.metadata.interface_type or ("cli" if "cli" in session_id.lower() else "web")
+            origin_ctx = OriginContext(
+                session_id=session_id,
+                interface_type=itype,
+                origin_device_id=orig_dev,
+            )
+
+        # 4. Assemble unified context dictionary
         context = {
             "session_id": session_id,
             "user_id": user_id,
@@ -46,6 +58,10 @@ class ContextEngine:
             "recent_turns": recent_turns,
             "relevant_memories": [m.content for m in memories],
             "active_device_id": active_device_id or rio_input.metadata.device_id,
+            "origin_context": origin_ctx,
+            "origin_device_id": origin_ctx.origin_device_id if origin_ctx else (active_device_id or rio_input.metadata.device_id),
+            "interface_type": origin_ctx.interface_type if origin_ctx else rio_input.metadata.interface_type,
             "timestamp": rio_input.timestamp,
         }
         return context
+

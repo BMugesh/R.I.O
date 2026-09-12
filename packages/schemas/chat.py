@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
 from pydantic import BaseModel, Field
+from packages.schemas.devices import OriginContext
 from packages.schemas.input import InputType
 from packages.schemas.tasks import TaskPlan, TaskStep
 from packages.schemas.safety import ApprovalRequest
@@ -38,6 +39,9 @@ class ChatRequest(BaseModel):
     input_type: InputType = Field(default=InputType.TEXT, alias="inputType")
     attachments: List[Dict[str, Any]] = Field(default_factory=list)
     device_id: Optional[str] = Field(default=None, alias="deviceId")
+    origin_device_id: Optional[str] = Field(default=None, alias="originDeviceId")
+    interface_type: Optional[str] = Field(default=None, alias="interfaceType")
+    origin_context: Optional[OriginContext] = Field(default=None, alias="originContext")
     developer_mode: bool = Field(default=False, alias="developerMode")
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
@@ -48,11 +52,16 @@ class DeveloperTrace(BaseModel):
     task_id: Optional[str] = None
     agent_id: Optional[str] = None
     model_id: Optional[str] = None
+    origin_device_id: Optional[str] = None
+    execution_device_id: Optional[str] = None
+    resolution_reason: Optional[str] = None
+    explicit_override: bool = False
     plan: Optional[TaskPlan] = None
     steps: List[TaskStep] = Field(default_factory=list)
     events: List[Dict[str, Any]] = Field(default_factory=list)
     verification_summary: Optional[Dict[str, Any]] = None
     latency_ms: float = 0.0
+
 
 
 class ChatResponse(BaseModel):

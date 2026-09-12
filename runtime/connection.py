@@ -48,7 +48,18 @@ class ConnectionManager:
 
     @property
     def is_connected(self) -> bool:
-        return self._ws is not None and not self._ws.closed
+        if self._ws is None:
+            return False
+        if hasattr(self._ws, "state"):
+            try:
+                return getattr(self._ws.state, "name", "") == "OPEN" or self._ws.state == 1
+            except Exception:
+                pass
+        if hasattr(self._ws, "closed"):
+            return not self._ws.closed
+        if hasattr(self._ws, "open"):
+            return bool(self._ws.open)
+        return True
 
     async def send_raw(self, message: str) -> bool:
         """Send a raw text payload over the active WebSocket."""
@@ -157,5 +168,9 @@ class ConnectionManager:
     def stop(self) -> None:
         """Signal the connection manager to stop and close open sockets."""
         self._running = False
-        if self._ws and not self._ws.closed:
-            asyncio.create_task(self._ws.close())
+        if self._ws:
+            try:
+                if self.is_connected:
+                    asyncio.create_task(self._ws.close())
+            except Exception:
+                pass

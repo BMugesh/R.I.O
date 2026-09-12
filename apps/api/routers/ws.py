@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from typing import Any, Dict, Optional, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from packages.schemas.chat import ChatRequest, ChatStreamChunk
@@ -32,6 +33,7 @@ class ConnectionManager:
         for dev_id, ws in list(self.device_connections.items()):
             if ws == websocket:
                 del self.device_connections[dev_id]
+                container.device_registry.disconnect_device(dev_id)
                 if dev_id in _registered_devices:
                     _registered_devices[dev_id].status = DeviceStatus.OFFLINE
 
@@ -72,6 +74,7 @@ class ConnectionManager:
                 device_id=device_id,
                 success=False,
                 action=command.action,
+                status="uncertain",
                 error="Command execution timed out.",
             )
         finally:
@@ -79,6 +82,22 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+@router.get("/ws", tags=["WebSocket"])
+async def ws_http_info():
+    """Informational endpoint for users who navigate to /ws via HTTP browser."""
+    return {
+        "service": "R.I.O. WebSocket Gateway",
+        "status": "online",
+        "protocol": "WebSocket (ws:// or wss://)",
+        "message": "This endpoint is for real-time WebSocket client connections (ws://), not direct HTTP browser navigation.",
+        "user_interfaces": {
+            "web_app": "Open http://<host-ip>:3000 in your browser to access R.I.O. Web UI",
+            "api_docs": "Open http://<host-ip>:8000/docs for interactive REST documentation",
+        },
+        "connected_devices": list(manager.device_connections.keys()),
+    }
 
 
 @router.websocket("/ws")
@@ -94,31 +113,55 @@ async def websocket_endpoint(websocket: WebSocket):
             # 1. Device Registration Handshake
             if msg_type == "device_register":
                 device_id = data.get("device_id", "desktop-01")
+                manifest_data = data.get("manifest") or {}
+                token = data.get("token")
+
+                # Optional token validation if configured
+                expected_token = os.getenv("RIO_AUTH_TOKEN") or os.getenv("RIO_DEVICE_SECRET")
+                if expected_token and token and token != expected_token:
+                    logger.warning(f"Device '{device_id}' registration failed authentication.")
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "error": "Device authentication failed: invalid token.",
+                    }))
+                    continue
+
                 manager.device_connections[device_id] = websocket
 
                 # Parse capabilities
-                raw_caps = data.get("capabilities", [])
-                cap_enums = []
+                raw_caps = data.get("capabilities") or manifest_data.get("capabilities", [])
+                cap_list = []
                 for c in raw_caps:
                     try:
-                        cap_enums.append(DeviceCapability(c))
+                        cap_list.append(DeviceCapability(c) if isinstance(c, str) and c in [e.value for e in DeviceCapability] else c)
                     except ValueError:
-                        pass
+                        cap_list.append(c)
 
-                _registered_devices[device_id] = Device(
+                dev_platform = (data.get("platform") or manifest_data.get("platform") or "windows").lower()
+                dev_type = DeviceType.ANDROID if "android" in dev_platform else (
+                    DeviceType.DESKTOP if "windows" in dev_platform else DeviceType.LAPTOP
+                )
+
+                registered_dev = Device(
                     device_id=device_id,
-                    name=data.get("device_name", socket_name := "Workstation"),
-                    type=DeviceType.DESKTOP if "windows" in data.get("platform", "").lower() else DeviceType.LAPTOP,
+                    name=data.get("device_name") or manifest_data.get("name", "Workstation"),
+                    device_name=data.get("device_name") or manifest_data.get("name", "Workstation"),
+                    type=dev_type,
+                    platform=dev_platform,
                     status=DeviceStatus.ONLINE,
-                    capabilities=cap_enums,
-                    permissions=data.get("permissions", []),
-                    os_info=data.get("platform_version", "Windows 11"),
+                    connection_state="online",
+                    capabilities=cap_list,
+                    permissions=data.get("permissions") or manifest_data.get("permissions", []),
+                    os_info=data.get("platform_version") or manifest_data.get("os_info", "Windows 11"),
                     last_seen=datetime.now(timezone.utc).isoformat(),
                     metadata={
-                        "runtime_version": data.get("runtime_version", "1.0.0"),
-                        "architecture": data.get("architecture"),
+                        "runtime_version": data.get("runtime_version") or manifest_data.get("runtime_version", "0.2.1-dev"),
+                        "architecture": data.get("architecture") or manifest_data.get("architecture"),
                     },
                 )
+                container.device_registry.register_device(registered_dev)
+                _registered_devices[device_id] = registered_dev
+
                 logger.info(f"Device '{device_id}' registered and online.")
                 await websocket.send_text(json.dumps({
                     "type": "device_registered",
@@ -131,15 +174,17 @@ async def websocket_endpoint(websocket: WebSocket):
             # 2. Heartbeat Handling
             if msg_type == "heartbeat":
                 device_id = data.get("device_id")
-                if device_id and device_id in _registered_devices:
-                    _registered_devices[device_id].last_seen = datetime.now(timezone.utc).isoformat()
-                    _registered_devices[device_id].status = DeviceStatus.ONLINE
+                if device_id:
+                    container.device_registry.record_heartbeat(device_id, metadata=data.get("telemetry") or {})
+                    if device_id in _registered_devices:
+                        _registered_devices[device_id].last_seen = datetime.now(timezone.utc).isoformat()
+                        _registered_devices[device_id].status = DeviceStatus.ONLINE
                 continue
 
             # 3. Device Observation Reply
             if msg_type == "device_observation":
                 obs_data = data.get("observation") or data
-                cmd_id = obs_data.get("command_id")
+                cmd_id = obs_data.get("command_id") or obs_data.get("action_id")
                 if cmd_id and cmd_id in manager.pending_observations:
                     fut = manager.pending_observations[cmd_id]
                     if not fut.done():
@@ -177,7 +222,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     message=user_msg,
                     session_id=session_id,
                     developer_mode=dev_mode,
+                    device_id=data.get("device_id") or data.get("deviceId"),
+                    origin_device_id=data.get("origin_device_id") or data.get("originDeviceId"),
+                    interface_type=data.get("interface_type") or data.get("interfaceType") or "web",
+                    origin_context=data.get("origin_context") or data.get("originContext"),
                 )
+
 
                 response = await container.orchestrator.process_chat(chat_req)
 

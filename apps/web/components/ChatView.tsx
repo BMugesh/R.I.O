@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Paperclip, Terminal, Bot, User, Volume2, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Mic, Paperclip, Terminal, Bot, User, Volume2, Sparkles, Loader2, Smartphone, Laptop } from 'lucide-react';
 import { ChatMessage, DeveloperTrace, ApprovalRequest } from '../../../packages/types';
 import { TaskTicker } from './TaskTicker';
 import { ApprovalModal } from './ApprovalModal';
@@ -31,6 +31,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
   const [latestTrace, setLatestTrace] = useState<DeveloperTrace | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [deviceOverride, setDeviceOverride] = useState<'auto' | 'phone' | 'laptop'>('auto');
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isMob =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        window.innerWidth <= 768;
+      setIsMobileDevice(isMob);
+    }
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +71,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
     setIsExecuting(true);
     setCurrentStatus('Reasoning & planning...');
 
+    const effectiveOrigin =
+      deviceOverride === 'phone'
+        ? 'android-01'
+        : deviceOverride === 'laptop'
+        ? 'laptop-01'
+        : isMobileDevice
+        ? 'android-01'
+        : 'laptop-01';
+    const effectiveInterface = effectiveOrigin === 'android-01' ? 'mobile' : 'web';
+
     try {
       const apiBase = getApiBaseUrl();
       const res = await fetch(`${apiBase}/api/v1/chat`, {
@@ -67,7 +88,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userText,
-          sessionId: 'web_session_01',
+          sessionId: effectiveOrigin === 'android-01' ? 'mobile_web_session' : 'desktop_web_session',
+          originDeviceId: effectiveOrigin,
+          interfaceType: effectiveInterface,
           developerMode,
         }),
       });
@@ -163,23 +186,50 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
           </div>
         </div>
 
-        {/* Developer Mode Button */}
-        <button
-          type="button"
-          onClick={() => {
-            onToggleDeveloperMode();
-            if (!developerMode) setIsDrawerOpen(true);
-          }}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono font-medium border transition-all ${
-            developerMode
-              ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300 shadow-lg shadow-cyan-500/10'
-              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Terminal className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Dev Mode:</span>
-          <span>{developerMode ? 'ON' : 'OFF'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Active Device Origin Indicator / Selector */}
+          <button
+            type="button"
+            onClick={() => {
+              setDeviceOverride((prev) =>
+                prev === 'auto' ? (isMobileDevice ? 'laptop' : 'phone') : prev === 'phone' ? 'laptop' : 'auto'
+              );
+            }}
+            title="Click to toggle default device origin"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono font-medium border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 transition-all"
+          >
+            {deviceOverride === 'phone' || (deviceOverride === 'auto' && isMobileDevice) ? (
+              <>
+                <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-400">Phone</span>
+              </>
+            ) : (
+              <>
+                <Laptop className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-cyan-400">Laptop</span>
+              </>
+            )}
+            {deviceOverride !== 'auto' && <span className="text-[10px] text-amber-400 font-sans font-semibold">(locked)</span>}
+          </button>
+
+          {/* Developer Mode Button */}
+          <button
+            type="button"
+            onClick={() => {
+              onToggleDeveloperMode();
+              if (!developerMode) setIsDrawerOpen(true);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono font-medium border transition-all ${
+              developerMode
+                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300 shadow-lg shadow-cyan-500/10'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Dev Mode:</span>
+            <span>{developerMode ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Messages Feed */}

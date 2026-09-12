@@ -45,6 +45,9 @@ from packages.schemas.devices import (
     Device,
     DeviceCommand,
     DeviceObservation,
+    InterfaceType,
+    OriginContext,
+    DeviceResolution,
 )
 from packages.schemas.quantum import (
     QuantumAlgorithmType,
@@ -100,6 +103,9 @@ __all__ = [
     "Device",
     "DeviceCommand",
     "DeviceObservation",
+    "InterfaceType",
+    "OriginContext",
+    "DeviceResolution",
     "QuantumAlgorithmType",
     "QuantumBackendType",
     "QuantumCircuitSpec",
@@ -112,3 +118,4 @@ __all__ = [
     "ChatResponse",
     "ChatStreamChunk",
 ]
+

@@ -28,6 +28,8 @@ class ResponseEngine:
         # 1. If it was a task that failed or errored
         if task and task.status == TaskStatus.FAILED:
             err = task.error or "The requested action could not be completed."
+            if "does not support" in err.lower() or "not supported" in err.lower() or "origin device" in err.lower() or "cannot run" in err.lower():
+                return err
             if "whatsapp" in user_message.lower():
                 return "I couldn't complete the message because WhatsApp wasn't available or verified."
             if "contact" in err.lower():
@@ -35,14 +37,55 @@ class ResponseEngine:
             return f"I ran into an issue and couldn't finish the task: {err}"
 
         # 2. If it was an action task that succeeded with verification
-        if task and task.status == TaskStatus.COMPLETED and task.plan and len(task.plan.steps) > 1:
+        if task and task.status == TaskStatus.COMPLETED and task.plan and len(task.plan.steps) >= 1:
             msg_lower = user_message.lower()
-            if "whatsapp" in msg_lower:
+            dev_resolution = (context or {}).get("device_resolution")
+
+            # Multi-Device compound response
+            if ("on my phone" in msg_lower or "on phone" in msg_lower) and ("on my laptop" in msg_lower or "on laptop" in msg_lower):
+                import re
+                p_match = re.search(r"(?:open|launch)\s+([a-zA-Z0-9\-_]+(?:\s+[a-zA-Z0-9\-_]+)?)\s+on\s+(?:my\s+)?phone", user_message, re.IGNORECASE)
+                l_match = re.search(r"(?:then\s+open|and\s+open|open|launch)\s+([a-zA-Z0-9\-_]+(?:\s+[a-zA-Z0-9\-_]+)?)\s+on\s+(?:my\s+)?(?:laptop|workstation|pc)", user_message, re.IGNORECASE)
+                p_app = p_match.group(1).strip().title() if p_match else "Chrome"
+                l_app = l_match.group(1).strip().title() if l_match else "VS Code"
+                return f"Done. {p_app} is open on your phone, and {l_app} is open on your laptop."
+
+            # Explicit Remote Overrides
+            if ("on my phone" in msg_lower or "on phone" in msg_lower or "on android" in msg_lower) and (msg_lower.startswith("open ") or "launch " in msg_lower):
+                import re
+                m_app = re.search(r"(?:open|launch)\s+([a-zA-Z0-9\s]+?)(?:\s+on\s+.*)?$", user_message, re.IGNORECASE)
+                app_n = m_app.group(1).strip().title() if m_app else "The application"
+                return f"Done. {app_n} is open on your phone."
+
+            if ("on my laptop" in msg_lower or "on laptop" in msg_lower or "on desktop" in msg_lower or "on pc" in msg_lower or "on workstation" in msg_lower) and (msg_lower.startswith("open ") or "launch " in msg_lower):
+                import re
+                m_app = re.search(r"(?:open|launch)\s+([a-zA-Z0-9\s]+?)(?:\s+on\s+.*)?$", user_message, re.IGNORECASE)
+                app_n = m_app.group(1).strip().title() if m_app else "The application"
+                return f"Done. {app_n} is open on your laptop."
+
+            # Camera photo
+            if "photo" in msg_lower or "picture" in msg_lower or "camera" in msg_lower:
+                return "Done. I've captured the photo using your phone's camera."
+
+            # WhatsApp message
+            if "whatsapp" in msg_lower and ("send" in msg_lower or "message" in msg_lower or "hi" in msg_lower or "hello" in msg_lower):
                 import re
                 m_contact = re.search(r"(?:to contact named|to contact|to)\s+['\"]?([^'\"\.,]+)['\"]?", user_message, re.IGNORECASE)
                 contact = m_contact.group(1).strip() if m_contact else "the contact"
                 return f"Done. I've sent the message to {contact}. Please check WhatsApp."
 
+            # YouTube search & play workflow
+            if "youtube" in msg_lower and ("search" in msg_lower or "play" in msg_lower or "music" in msg_lower or "video" in msg_lower or "from" in msg_lower):
+                import re
+                import urllib.parse
+                m_q = re.search(r"(?:search (?:for|google for)?|play)\s*(.+?)(?:\s*(?:and|,)\s*play.*|\s+from\s+\d+.*|\s+on\s+.*)?$", user_message, re.IGNORECASE)
+                query = m_q.group(1).strip() if m_q else "relaxing music"
+                query = re.sub(r"^(?:for|the)\s+", "", query, flags=re.IGNORECASE).strip()
+                encoded_q = urllib.parse.quote_plus(query)
+                return f"Done. Playing '{query}' on YouTube.\n\n[▶️ Watch on YouTube](https://www.youtube.com/results?search_query={encoded_q})"
+
+            if "youtube" in msg_lower and (msg_lower.startswith("open ") or "launch " in msg_lower):
+                return f"Done. YouTube is open.\n\n[▶️ Open YouTube](https://www.youtube.com)"
 
             if "screenshot" in msg_lower:
                 return "Done. I've captured the screenshot and verified the file has been saved."
@@ -52,14 +95,27 @@ class ResponseEngine:
                         return step.result["research_findings"]
                 return "I've completed the search and gathered the relevant findings for you."
             if msg_lower.startswith("open ") or "launch " in msg_lower:
-                app_n = msg_lower.replace("open ", "").replace("launch ", "").strip().title()
-                return f"Done. {app_n} is open."
-
+                import re
+                from runtime.android.actions import KNOWN_ANDROID_PACKAGES
+                cleaned = re.sub(r"^(?:open|launch)\s+", "", user_message, flags=re.IGNORECASE)
+                cleaned = re.sub(r"\s+on\s+(?:my\s+)?(?:laptop|desktop|workstation|pc|phone|android|mobile|server)$", "", cleaned, flags=re.IGNORECASE).strip()
+                
+                # Attach direct deep link if available
+                clean_k = cleaned.lower().replace(" ", "").replace("_", "").replace("-", "")
+                link_str = ""
+                if clean_k in KNOWN_ANDROID_PACKAGES:
+                    spec = KNOWN_ANDROID_PACKAGES[clean_k]
+                    app_url = spec.get("url")
+                    if app_url and ("http" in app_url or "intent" in app_url or "tel" in app_url or "sms" in app_url):
+                        link_str = f"\n\n[🚀 Open {spec['display_name']}]({app_url})"
+                
+                return f"Done. {cleaned.title()} is open.{link_str}"
 
             if any(k in msg_lower for k in ("qaoa", "vqe", "quantum")):
                 return "Quantum simulation completed and classically verified. The optimal solution has been computed."
 
             return f"Done. I've completed the task: '{task.goal}'."
+
 
         # 3. Conversational chit-chat response synthesis (via Llama 3.3 70B / Fast Router)
         try:

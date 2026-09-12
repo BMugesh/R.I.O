@@ -26,11 +26,16 @@ class InputType(str, Enum):
     MEMORY_CONTEXT = "memory_context"
 
 
+from packages.schemas.devices import OriginContext
+
+
 class InputMetadata(BaseModel):
     client_id: Optional[str] = None
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     device_id: Optional[str] = None
+    interface_type: Optional[str] = None
+    origin_context: Optional[OriginContext] = None
     mime_type: Optional[str] = None
     file_name: Optional[str] = None
     file_size_bytes: Optional[int] = None
@@ -38,6 +43,7 @@ class InputMetadata(BaseModel):
     coordinates: Optional[Dict[str, float]] = None  # For location / cursor coordinates
     device_type: Optional[str] = None
     custom: Dict[str, Any] = Field(default_factory=dict)
+
 
 
 class RIOInput(BaseModel):

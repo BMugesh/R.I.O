@@ -75,3 +75,15 @@ class VerificationEngine:
         # Default fallback: check if any high-confidence evidence verified
         return any(e.verified and e.confidence >= 0.8 for e in evidences)
 
+    async def verify_observation(self, observation: Dict[str, Any], expected: Optional[Dict[str, Any]] = None) -> bool:
+        """Helper to evaluate raw observation dict against expected state."""
+        if not observation:
+            return False
+        if observation.get("status") == "failed" or observation.get("verified") is False:
+            return False
+        if expected:
+            for k, v in expected.items():
+                if observation.get(k) != v:
+                    return False
+        return observation.get("verified", False) is True or observation.get("success", False) is True
+

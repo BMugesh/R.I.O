@@ -73,50 +73,24 @@ class ComputerAgent(BaseAgent):
             }
 
         elif action_type in ("open_application", "launch_app"):
-            import shutil
+            from runtime.validator import WindowsAppValidator
             app_lower = app_name.lower()
-            cmd = None
-            if any(k in app_lower for k in ("code", "vscode", "vs code")):
-                resolved = shutil.which("code") or shutil.which("code.cmd")
-                if not resolved:
-                    local_appdata = os.getenv("LOCALAPPDATA", "")
-                    candidate = os.path.join(local_appdata, "Programs", "Microsoft VS Code", "Code.exe")
-                    if os.path.exists(candidate):
-                        resolved = candidate
-                cmd = [resolved] if resolved else ["code"]
-            elif "chrome" in app_lower:
-                resolved = shutil.which("chrome")
-                if not resolved:
-                    for c_path in (
-                        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                        os.path.join(os.getenv("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
-                    ):
-                        if os.path.exists(c_path):
-                            resolved = c_path
-                            break
-                cmd = [resolved] if resolved else (["start", "chrome"] if sys.platform == "win32" else ["google-chrome"])
-            elif "whatsapp" in app_lower:
-                cmd = ["start", "whatsapp:"] if sys.platform == "win32" else (["open", "-a", "WhatsApp"] if sys.platform == "darwin" else ["xdg-open", "whatsapp:"])
-            elif "notepad" in app_lower:
-                cmd = ["notepad"]
-            elif "calc" in app_lower:
-                cmd = ["calc"]
-            else:
-                cmd = [app_name]
-
-            pid = None
-            if cmd:
-                try:
-                    cmd_to_run = " ".join(cmd) if (sys.platform == "win32" and cmd[0] == "start") else cmd
-                    p = subprocess.Popen(cmd_to_run, shell=(sys.platform == "win32"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    pid = p.pid
-                    if "whatsapp" in app_lower:
-                        import asyncio
-                        await asyncio.sleep(1.5)
-                except Exception:
-                    pass
-            data = {"action": action_type, "app": app_name, "process_id": pid or 1234, "state": "active", "window_open": True, "verified": True}
+            val_res = await WindowsAppValidator.validate_application(app_name, close_after=False, verification_timeout=2.0)
+            
+            is_verified = val_res.status == "VERIFIED"
+            data = {
+                "action": action_type,
+                "app": app_name,
+                "process_id": val_res.pid or 1234,
+                "state": "active" if val_res.installed else "not_installed",
+                "window_open": is_verified,
+                "window_title": val_res.window_title,
+                "window_handle": val_res.window_handle,
+                "status": "verified" if is_verified else ("uncertain" if val_res.status == "UNCERTAIN" else "failed"),
+                "verified": is_verified,
+                "verification_layer": val_res.verification_layer,
+                "details": val_res.details,
+            }
 
         elif action_type in ("mouse_click", "locate_contact"):
             query = payload.get("search_query") or payload.get("query") or payload.get("contact")

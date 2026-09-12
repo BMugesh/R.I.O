@@ -103,6 +103,15 @@ class ExecutionEngine:
             agent = self._agents.get(step.agent_id)
             step_result = None
 
+            if step.action.action_type == "error_diagnostic":
+                err_msg = step.action.parameters.get("error") or step.description
+                step.status = StepStatus.FAILED
+                step.error = err_msg
+                task.status = TaskStatus.FAILED
+                task.error = err_msg
+                await self.emit_event(EventType.TASK_FAILED, task_id=task.id, payload={"error": err_msg})
+                return task
+
             # Retry loop
             while step.retry_count <= step.max_retries:
                 try:

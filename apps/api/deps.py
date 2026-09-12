@@ -14,6 +14,8 @@ from agents.quantum.agent import QuantumAgent
 from agents.research.agent import ResearchAgent
 from agents.verification.agent import VerificationAgent
 from agents.vision.agent import VisionAgent
+from services.device_registry.registry import DeviceRegistry
+from services.device_router.router import DeviceRouter
 from services.mcp.registry import MCPRegistry
 from services.memory.memory_manager import MemoryManager
 from services.model_router.router import ModelRouter
@@ -34,6 +36,8 @@ class Container:
         self.policy_engine = PolicyEngine()
         self.approval_engine = ApprovalEngine()
         self.verification_engine = VerificationEngine()
+        self.device_registry = DeviceRegistry()
+        self.device_router = DeviceRouter(registry=self.device_registry)
         self.tool_registry = ToolRegistry()
         self.mcp_registry = MCPRegistry(tool_registry=self.tool_registry)
         self.quantum_engine = QuantumEngine()
@@ -45,7 +49,9 @@ class Container:
             policy_engine=self.policy_engine,
             approval_engine=self.approval_engine,
             verification_engine=self.verification_engine,
+            device_router=self.device_router,
         )
+
 
         # Register all 14 Agents
         self.agents = {
