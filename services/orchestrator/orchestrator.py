@@ -29,6 +29,9 @@ from services.safety.policy_engine import PolicyEngine
 from services.scheduler.scheduler import ScheduledTaskState, TaskScheduler
 from services.verification.engine import VerificationEngine
 from packages.schemas.devices import OriginContext
+from services.compute.router import ComputeRouter, get_compute_router
+from services.profiler.spans import SpanType
+from services.profiler.tracer import ProfileTracer, get_tracer
 
 logger = logging.getLogger("rio.orchestrator")
 
@@ -45,6 +48,7 @@ class RIOOrchestrator:
         verification_engine: Optional[VerificationEngine] = None,
         device_router: Optional[DeviceRouter] = None,
         scheduler: Optional[TaskScheduler] = None,
+        compute_router: Optional[ComputeRouter] = None,
         event_callback: Optional[Callable[[RIOEvent], Any]] = None,
     ):
         self.model_router = model_router or ModelRouter()
@@ -54,6 +58,8 @@ class RIOOrchestrator:
         self.verification_engine = verification_engine or VerificationEngine()
         self.device_router = device_router or DeviceRouter()
         self.scheduler = scheduler or TaskScheduler()
+        self.compute_router = compute_router or get_compute_router()
+        self.tracer = get_tracer()
         self.event_callback = event_callback
 
         self.input_processor = InputProcessor()
@@ -84,6 +90,7 @@ class RIOOrchestrator:
         user_id = request.user_id or "default_user"
 
         # 1. Assemble Origin Context & Normalize Input
+        trace = self.tracer.start_trace(task_id=session_id, goal=request.message)
         origin_ctx = request.origin_context
         if not origin_ctx:
             orig_dev = request.origin_device_id or request.device_id
@@ -94,24 +101,27 @@ class RIOOrchestrator:
                 origin_device_id=orig_dev,
             )
 
-        rio_input = self.input_processor.process_raw(
-            raw_payload=request.message,
-            input_type=request.input_type,
-            source=str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
-            metadata={
-                "session_id": session_id,
-                "user_id": user_id,
-                "device_id": origin_ctx.origin_device_id,
-                "interface_type": str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
-                "origin_context": origin_ctx,
-            },
-        )
+        with self.tracer.span("input_processing", SpanType.INPUT):
+            rio_input = self.input_processor.process_raw(
+                raw_payload=request.message,
+                input_type=request.input_type,
+                source=str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
+                metadata={
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "device_id": origin_ctx.origin_device_id,
+                    "interface_type": str(origin_ctx.interface_type.value if hasattr(origin_ctx.interface_type, "value") else origin_ctx.interface_type),
+                    "origin_context": origin_ctx,
+                },
+            )
 
         # 2. Context Engine Assembly & Short-term recall
-        context = await self.context_engine.build_context(rio_input, active_device_id=request.device_id)
+        with self.tracer.span("context_assembly", SpanType.INPUT):
+            context = await self.context_engine.build_context(rio_input, active_device_id=request.device_id)
 
         # 3. Intent & Task Understanding
-        intent_info = await self.intent_engine.classify_intent(request.message, context)
+        with self.tracer.span("intent_detection", SpanType.INTENT):
+            intent_info = await self.intent_engine.classify_intent(request.message, context)
 
         task_obj: Optional[Task] = None
         reply_text = ""
@@ -122,7 +132,8 @@ class RIOOrchestrator:
             m_sched = re.search(r"\bat\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\b|\bin\s+(\d+\s*(?:minutes?|hours?))\b", request.message, re.IGNORECASE)
             
             # Generate DAG Plan
-            plan = await self.dag_planner.create_plan(goal=request.message, context=context)
+            with self.tracer.span("dag_planning", SpanType.PLANNING):
+                plan = await self.dag_planner.create_plan(goal=request.message, context=context)
             task_obj = Task(
                 session_id=session_id,
                 user_id=user_id,
@@ -157,24 +168,29 @@ class RIOOrchestrator:
                 task_obj = await self.execution_engine.execute_task(task_obj, context=context)
 
                 # Synthesize verified natural response
+                with self.tracer.span("response_synthesis", SpanType.RESPONSE):
+                    reply_text = await self.response_engine.generate_response(
+                        user_message=request.message,
+                        task=task_obj,
+                        context=context,
+                        developer_mode=request.developer_mode,
+                    )
+        else:
+            # Conversational path
+            with self.tracer.span("response_synthesis", SpanType.RESPONSE):
                 reply_text = await self.response_engine.generate_response(
                     user_message=request.message,
-                    task=task_obj,
+                    task=None,
                     context=context,
                     developer_mode=request.developer_mode,
                 )
-        else:
-            # Conversational path
-            reply_text = await self.response_engine.generate_response(
-                user_message=request.message,
-                task=None,
-                context=context,
-                developer_mode=request.developer_mode,
-            )
 
         # 5. Record conversational turns in memory
         await self.memory_manager.add_conversation_turn(session_id=session_id, role="user", content=request.message)
         await self.memory_manager.add_conversation_turn(session_id=session_id, role="assistant", content=reply_text)
+
+        # Finish Profiler Trace
+        completed_trace = self.tracer.end_trace(task_id=session_id)
 
         # 6. Build optional developer trace if requested
         dev_trace = None
@@ -196,6 +212,7 @@ class RIOOrchestrator:
                 explicit_override=exp_override,
                 plan=task_obj.plan if task_obj else None,
                 steps=task_obj.plan.steps if task_obj and task_obj.plan else [],
+                compute_trace=completed_trace.to_dict() if completed_trace else None,
                 latency_ms=latency,
             )
 

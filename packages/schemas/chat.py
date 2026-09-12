@@ -60,6 +60,7 @@ class DeveloperTrace(BaseModel):
     steps: List[TaskStep] = Field(default_factory=list)
     events: List[Dict[str, Any]] = Field(default_factory=list)
     verification_summary: Optional[Dict[str, Any]] = None
+    compute_trace: Optional[Dict[str, Any]] = None
     latency_ms: float = 0.0
 
 

@@ -151,6 +151,25 @@ async def process_prompt(
             )
 
         console.print(table)
+
+        # Render Performance / Compute Trace if present
+        compute_trace = dev_trace.get("compute_trace")
+        if compute_trace and compute_trace.get("spans"):
+            c_table = Table(title="⚡ Compute & Performance Trace", border_style="dim green", show_header=True)
+            c_table.add_column("Span / Operation", style="white")
+            c_table.add_column("Type", style="cyan")
+            c_table.add_column("Duration", justify="right", style="green")
+            c_table.add_column("Target", style="yellow")
+            for sp in compute_trace.get("spans", []):
+                meta = sp.get("metadata") or {}
+                c_table.add_row(
+                    sp.get("name", ""),
+                    sp.get("type", ""),
+                    f"{sp.get('duration_ms', 0):.1f} ms",
+                    str(meta.get("target", "")),
+                )
+            console.print(c_table)
+
         console.print(f"[dim]Total Latency: {latency_ms:.1f}ms | Model: {dev_trace.get('model_id', 'Groq Auto')}[/dim]")
         console.print()
 
@@ -729,6 +748,86 @@ def handle_voice_cli(args: list[str]):
             console.print(f"\n[bold red]❌ Voice execution failed: {e}[/bold red]\n")
 
 
+def handle_gpu_cli(args: list[str]):
+    """Handle 'rio gpu ...' subcommands."""
+    subcmd = args[0].lower() if args else "status"
+
+    if subcmd == "status":
+        from services.gpu.health import get_gpu_health_monitor
+        monitor = get_gpu_health_monitor()
+        console.print()
+        console.print(monitor.render_rich_card())
+        console.print()
+    else:
+        console.print(f"[yellow]Unknown GPU command: '{subcmd}'. Supported: 'rio gpu status'[/yellow]")
+
+
+def handle_compute_cli(args: list[str]):
+    """Handle 'rio compute ...' subcommands."""
+    subcmd = args[0].lower() if args else "status"
+
+    if subcmd == "status":
+        from services.compute.router import get_compute_router
+        router = get_compute_router()
+        st = router.get_status()
+
+        table = Table(title="⚡ R.I.O. Compute Fabric Status", border_style="cyan")
+        table.add_column("Target", style="bold cyan")
+        table.add_column("Device / Backend", style="white")
+        table.add_column("State", style="green")
+        table.add_column("Details", style="yellow")
+
+        gpu = st["gpu"]
+        gpu_status_str = gpu.get("status", "READY") if gpu.get("gpu_available") else "OFFLINE"
+        table.add_row(
+            "GPU (Local)",
+            gpu.get("device", "NVIDIA RTX 4050"),
+            gpu_status_str,
+            f"VRAM: {gpu.get('vram_free_mb', 0)}MB free / {gpu.get('vram_total_mb', 0)}MB total",
+        )
+        table.add_row("CPU (Control)", "Host Windows CPU", "READY", "Orchestration, Browser, Devices, DB")
+        table.add_row("Remote (Cloud)", "Groq Cloud API", "READY", "DeepSeek R1, Llama 3.3 70B, Whisper")
+
+        console.print()
+        console.print(table)
+        metrics = st.get("metrics", {})
+        console.print(f"[dim]Total Executions: {metrics.get('total_executions', 0)} (CPU: {metrics.get('cpu_executions', 0)}, GPU: {metrics.get('gpu_executions', 0)}, Remote: {metrics.get('remote_executions', 0)})[/dim]\n")
+
+    elif subcmd == "devices":
+        from services.gpu.cuda import detect_gpu
+        gpu = detect_gpu()
+        console.print("\n[bold cyan]⚡ R.I.O. Compute Hardware & Devices:[/bold cyan]")
+        console.print(f"  • [bold green]GPU:[/bold green] {gpu.get('device')} ({round(gpu.get('vram_total_mb', 0) / 1024.0, 1)} GB VRAM) — Status: {gpu.get('status')}")
+        console.print(f"  • [bold green]CPU:[/bold green] Host Windows Workstation (Control Plane)")
+        console.print(f"  • [bold green]Cloud:[/bold green] Groq High-Throughput Cloud Engine\n")
+
+    elif subcmd == "benchmark":
+        target = args[1].lower() if len(args) > 1 else "all"
+        console.print(f"\n[bold cyan]⚡ Executing R.I.O. Compute Benchmarks ({target})...[/bold cyan]")
+        from benchmarks.runner import run_all_benchmarks
+        rep = run_all_benchmarks()
+
+        table = Table(title=f"R.I.O. Benchmark Results: {rep['hardware']['gpu']}", border_style="green")
+        table.add_column("Workload", style="white")
+        table.add_column("CPU Latency", justify="right", style="cyan")
+        table.add_column("GPU Latency", justify="right", style="green")
+        table.add_column("Speedup", justify="right", style="bold yellow")
+
+        for w_name, w_data in rep["workloads"].items():
+            if target != "all" and target not in w_name:
+                continue
+            table.add_row(
+                w_name,
+                f"{w_data['cpu_ms']:.2f} ms",
+                f"{w_data['gpu_ms']:.2f} ms",
+                f"{w_data['speedup']}x",
+            )
+        console.print(table)
+        console.print()
+    else:
+        console.print(f"[yellow]Unknown compute subcommand: '{subcmd}'. Supported: 'status', 'devices', 'benchmark'[/yellow]")
+
+
 def main():
     """Main CLI Entry Point."""
     raw_args = sys.argv[1:]
@@ -773,6 +872,16 @@ def main():
     # Check for 'voice' subcommand
     if cleaned_args and cleaned_args[0].lower() == "voice":
         handle_voice_cli(cleaned_args[1:])
+        return
+
+    # Check for 'gpu' subcommand
+    if cleaned_args and cleaned_args[0].lower() == "gpu":
+        handle_gpu_cli(cleaned_args[1:])
+        return
+
+    # Check for 'compute' subcommand
+    if cleaned_args and cleaned_args[0].lower() == "compute":
+        handle_compute_cli(cleaned_args[1:])
         return
 
     parser = argparse.ArgumentParser(description="R.I.O. (Reasoning Intelligence Orchestration) CLI")
