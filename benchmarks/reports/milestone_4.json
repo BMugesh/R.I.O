@@ -2,19 +2,19 @@
   "hardware": {
     "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
     "vram_gb": 6.0,
-    "backend": "nvidia_smi",
+    "backend": "torch_cuda",
     "status": "READY"
   },
   "workloads": {
     "matrix_multiplication": {
-      "cpu_ms": 7.19,
-      "gpu_ms": 2.01,
-      "speedup": 3.58
+      "cpu_ms": 8.79,
+      "gpu_ms": 0.49,
+      "speedup": 17.88
     },
     "embedding": {
-      "cpu_ms": 6.51,
-      "gpu_ms": 5.05,
-      "speedup": 1.29
+      "cpu_ms": 6.63,
+      "gpu_ms": 28.1,
+      "speedup": 0.24
     },
     "vision": {
       "cpu_ms": 0.01,

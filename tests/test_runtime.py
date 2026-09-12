@@ -129,7 +129,7 @@ async def test_heartbeat_emission():
             device_id="dev-hb-01",
             send_fn=mock_send,
             health=health,
-            interval_seconds=0.1,
+            interval_seconds=0.05,
         )
 
         hb.start()
