@@ -46,3 +46,17 @@ include = ["packages*", "services*", "agents*", "apps*", "runtime*", "voice*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "unit: fast isolated unit tests",
+    "integration: multi-component integration tests",
+    "gpu: tests requiring CUDA/GPU",
+    "hardware: tests requiring physical hardware",
+    "network: tests requiring network access",
+    "slow: long-running tests",
+    "benchmark: performance benchmark tests",
+    "runtime: tests requiring the R.I.O. runtime",
+    "planning: M5 intelligent planning tests",
+    "execution: M5 execution and concurrency tests",
+    "recovery: M5 failure recovery and replanning tests",
+    "autonomous: M5 autonomous runtime tests",
+]

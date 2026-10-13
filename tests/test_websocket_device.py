@@ -1,4 +1,8 @@
 """Unit and Integration Tests for WebSocket Device Control and Remote Security."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import asyncio
 import json

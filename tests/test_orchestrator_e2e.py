@@ -1,4 +1,8 @@
 """End-to-End integration tests for R.I.O. Orchestrator and full OS pipelines."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import pytest
 from apps.api.deps import Container

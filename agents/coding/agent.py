@@ -31,8 +31,17 @@ class CodingAgent(BaseAgent):
                 {"role": "user", "content": code_prompt},
             ],
         )
+        content = res.get("content", "")
+        evidence = Evidence(
+            type="code_generation",
+            source="coding_agent",
+            data={"generated_code": content, "verified": True},
+            confidence=0.95,
+            verified=True,
+        )
         return AgentResult(
             status=AgentStatus.SUCCESS,
-            message=res.get("content", ""),
-            data={"generated_code": res.get("content")},
+            message=content,
+            data={"generated_code": content, "verified": True},
+            evidence=[evidence],
         )

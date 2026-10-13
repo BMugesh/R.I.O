@@ -7,10 +7,26 @@ Evaluates observed outputs against step expected states.
 from typing import Any, Dict, List, Optional
 from packages.schemas.agents import Evidence
 from packages.schemas.tasks import TaskStep, VerificationStrategy
+from services.verification.adaptive import AdaptiveVerifier, VerificationLevel, VerificationResult
 
 
 class VerificationEngine:
-    """Core Verification Engine."""
+    """Core Verification Engine with Adaptive Multi-Level Evidence Evaluation."""
+
+    async def verify_step_adaptive(
+        self,
+        step: TaskStep,
+        observation: Optional[Dict[str, Any]] = None,
+        evidence_list: Optional[List[Evidence]] = None,
+        level: Optional[VerificationLevel] = None,
+    ) -> VerificationResult:
+        """Evaluate evidence against verification requirements and return detailed result."""
+        return AdaptiveVerifier.evaluate(
+            step=step,
+            observation=observation,
+            evidence_list=evidence_list,
+            level=level,
+        )
 
     async def verify_step(
         self,
@@ -22,68 +38,26 @@ class VerificationEngine:
 
         Returns True only if verified evidence matches the expected state.
         """
-        obs = observation or step.observation or {}
-        evidences = evidence_list or step.evidence or []
-
-        # If no verification strategy was specified, default to checking tool/agent success status
-        if not step.verification_strategy:
-            return obs.get("success", False) is True or any(e.verified for e in evidences)
-
-        strategy = step.verification_strategy
-        expected = strategy.expected_state
-
-        if strategy.strategy_type == "file_check":
-            target_path = expected.get("file_path")
-            if not target_path:
-                return False
-            for ev in evidences:
-                if ev.type == "file_check" and ev.data.get("path") == target_path:
-                    return ev.verified is True
-            # Check observation
-            return obs.get("file_exists") is True
-
-        elif strategy.strategy_type == "dom_query":
-            selector = expected.get("selector")
-            for ev in evidences:
-                if ev.type == "dom_element" and ev.data.get("selector") == selector:
-                    return ev.verified is True
-            return obs.get("element_found") is True
-
-        elif strategy.strategy_type == "api_status":
-            expected_code = expected.get("expected_status_code", 200)
-            for ev in evidences:
-                if ev.type == "api_status" and ev.data.get("status_code") == expected_code:
-                    return ev.verified is True
-            return obs.get("status_code") == expected_code
-
-        elif strategy.strategy_type == "device_observation":
-            # For UI tasks (e.g. WhatsApp message sent, app launched)
-            for ev in evidences:
-                if ev.type == "device_observation" and ev.verified:
-                    return True
-            return obs.get("verified", False) is True or obs.get("success", False) is True
-
-        elif strategy.strategy_type == "assertion":
-            for k, v in expected.items():
-                if obs.get(k) == v:
-                    return True
-                for ev in evidences:
-                    if ev.data.get(k) == v and ev.verified:
-                        return True
-            return any(e.verified and e.confidence >= 0.8 for e in evidences)
-
-        # Default fallback: check if any high-confidence evidence verified
-        return any(e.verified and e.confidence >= 0.8 for e in evidences)
+        res = await self.verify_step_adaptive(step=step, observation=observation, evidence_list=evidence_list)
+        return res.verified and res.status == "verified"
 
     async def verify_observation(self, observation: Dict[str, Any], expected: Optional[Dict[str, Any]] = None) -> bool:
         """Helper to evaluate raw observation dict against expected state."""
         if not observation:
             return False
-        if observation.get("status") == "failed" or observation.get("verified") is False:
+        if observation.get("status") == "failed" or observation.get("verified") is False or observation.get("error"):
             return False
         if expected:
             for k, v in expected.items():
                 if observation.get(k) != v:
                     return False
-        return observation.get("verified", False) is True or observation.get("success", False) is True
+            return True
+        # Without explicit expected state, must possess concrete observable attributes
+        has_concrete_state = any(
+            k in observation for k in (
+                "file_exists", "process_id", "window_handle", "window_title",
+                "current_url", "element_found", "message_sent", "output", "data"
+            )
+        )
+        return has_concrete_state and observation.get("verified", False) is True
 

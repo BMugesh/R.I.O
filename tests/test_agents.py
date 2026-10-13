@@ -1,4 +1,8 @@
 """Unit tests for all 14 R.I.O. modular agents."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from agents import (

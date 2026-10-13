@@ -8,6 +8,10 @@ Validates complete paths:
 5. Voice/User Camera Intent -> Router -> Phone -> Camera -> Verification
 6. Compound Multi-Device DAG: "Open Chrome on my phone and VS Code on my laptop"
 """
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import pytest
 from apps.api.deps import container

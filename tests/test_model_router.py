@@ -1,4 +1,8 @@
 """Unit tests for Model Router and capability-based routing."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from services.model_router.router import ModelRouter

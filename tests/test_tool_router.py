@@ -1,4 +1,8 @@
 """Unit tests for Tool Router and Built-in tools."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import os
 import pytest

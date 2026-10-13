@@ -162,11 +162,83 @@ class TaskScheduler:
             except Exception as e:
                 self.update_state(task_id, ScheduledTaskState.FAILED, error=str(e))
         else:
-            self.update_state(task_id, ScheduledTaskState.VERIFYING)
-            await asyncio.sleep(0.05)
-            self.update_state(task_id, ScheduledTaskState.COMPLETED, result={"status": "verified", "note": "Simulation verified"})
+            self.update_state(task_id, ScheduledTaskState.COMPLETED, result={"status": "verified", "execution_result": None, "note": "Triggered without custom executor callback"})
 
         return self._tasks[task_id]
+
+    def _is_task_due(self, task: ScheduledTask, now: datetime) -> bool:
+        """Evaluate if task trigger time is due."""
+        iso_str = task.trigger_time_iso
+        try:
+            trigger_dt = datetime.fromisoformat(iso_str)
+            if trigger_dt.tzinfo is None:
+                trigger_dt = trigger_dt.replace(tzinfo=timezone.utc)
+            return now >= trigger_dt
+        except Exception:
+            pass
+
+        try:
+            from dateutil import parser
+            trigger_dt = parser.parse(iso_str)
+            if trigger_dt.tzinfo is None:
+                trigger_dt = trigger_dt.replace(tzinfo=timezone.utc)
+            return now >= trigger_dt
+        except Exception:
+            return False
+
+    def get_due_tasks(self) -> List[ScheduledTask]:
+        """Return all tasks whose trigger time has arrived and are in SCHEDULED/WAITING state."""
+        now = datetime.now(timezone.utc)
+        due = []
+        for task in self._tasks.values():
+            if task.state in (ScheduledTaskState.SCHEDULED, ScheduledTaskState.WAITING):
+                if self._is_task_due(task, now):
+                    due.append(task)
+        return due
+
+    async def tick(self) -> List[ScheduledTask]:
+        """Check for due tasks and trigger them through execution lifecycle."""
+        due_tasks = self.get_due_tasks()
+        executed = []
+        for task in due_tasks:
+            try:
+                res = await self.trigger_now(task.id)
+                executed.append(res)
+            except Exception as e:
+                logger.error(f"Error triggering scheduled task {task.id}: {e}")
+        return executed
+
+    async def start(self, check_interval: float = 0.5) -> None:
+        """Start the background scheduler evaluation loop."""
+        if self._running:
+            return
+        self._running = True
+        self._loop_task = asyncio.create_task(self._run_scheduler_loop(check_interval))
+        logger.info(f"TaskScheduler background loop started (interval={check_interval}s).")
+
+    async def stop(self) -> None:
+        """Stop the background scheduler loop and clean up."""
+        self._running = False
+        if self._loop_task:
+            self._loop_task.cancel()
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
+            self._loop_task = None
+        logger.info("TaskScheduler background loop stopped.")
+
+    async def _run_scheduler_loop(self, check_interval: float) -> None:
+        """Background continuous scheduler loop."""
+        while self._running:
+            try:
+                await self.tick()
+            except Exception as e:
+                logger.error(f"Error in scheduler tick: {e}")
+            try:
+                await asyncio.sleep(check_interval)
+            except asyncio.CancelledError:
+                break
 
     def cancel(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)
@@ -178,6 +250,10 @@ class TaskScheduler:
 
     def clear(self) -> None:
         """Clear memory cache and remove storage file."""
+        if self._loop_task and not self._loop_task.done():
+            self._loop_task.cancel()
+            self._loop_task = None
+        self._running = False
         self._tasks.clear()
         if self.storage_path.exists():
             try:

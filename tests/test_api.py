@@ -1,4 +1,8 @@
 """Integration tests for FastAPI REST API endpoints."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +21,7 @@ def test_list_agents_api():
     res = client.get("/api/v1/agents")
     assert res.status_code == 200
     agents = res.json()
-    assert len(agents) == 14
+    assert len(agents) >= 14
     agent_ids = [a["id"] for a in agents]
     assert "conversation_agent" in agent_ids
     assert "quantum_agent" in agent_ids

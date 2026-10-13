@@ -1,4 +1,8 @@
 """Unit and Integration Tests for R.I.O. Voice & Wake-Word Subsystem (Milestone 3)."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import asyncio
 import io

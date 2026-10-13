@@ -1,4 +1,8 @@
 """Test GPU hardware detection and health monitor for R.I.O. (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.gpu
+
+
 
 import pytest
 from services.gpu.cuda import GPUInfo, detect_gpu, get_gpu_info, is_cuda_available

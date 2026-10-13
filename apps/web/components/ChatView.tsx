@@ -19,7 +19,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
     {
       id: 'welcome_msg',
       role: 'assistant',
-      content: "Hey! I'm R.I.O. (Reasoning Intelligence Orchestration). How can I help you today?",
+      content: "R.I.O. ready.",
       inputType: 'text',
       createdAt: new Date().toISOString(),
     },
@@ -102,15 +102,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ developerMode, onToggleDevel
       const data = await res.json();
       setCurrentStatus(undefined);
 
-      // Assistant Reply
-      const botMsg: ChatMessage = {
-        id: data.id || String(Date.now() + 1),
-        role: 'assistant',
-        content: data.reply,
-        inputType: 'text',
-        createdAt: data.createdAt || new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, botMsg]);
+      // Assistant Reply (only display message if R.I.O. spoke, respect silence)
+      if (data.reply && data.reply.trim().length > 0) {
+        const botMsg: ChatMessage = {
+          id: data.id || String(Date.now() + 1),
+          role: 'assistant',
+          content: data.reply,
+          inputType: 'text',
+          createdAt: data.createdAt || new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+      }
 
       // Developer Trace
       if (data.developerTrace) {

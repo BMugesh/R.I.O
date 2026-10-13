@@ -1,4 +1,8 @@
 """Unit and Integration Tests for Windows Application Validator (Milestone 2.5)."""
+import pytest
+pytestmark = pytest.mark.hardware
+
+
 
 import platform
 import pytest

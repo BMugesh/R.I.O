@@ -1,4 +1,8 @@
 """Unit tests for Quantum Router, QAOA, VQE, and Simulation Engine."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from packages.schemas.quantum import QuantumAlgorithmType, QuantumJob

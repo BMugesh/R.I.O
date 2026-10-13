@@ -3,11 +3,40 @@
 Converts internal task graphs, step states, and verification evidence into natural,
 friendly user responses. Strictly prevents internal JSON, model names, or agent traces
 from leaking into the user conversation unless Developer Mode is explicitly active.
+
+TRUE FRIDAY MODE: Responses are concise, no filler, no chatbot chatter.
 """
 
+import logging
 from typing import Any, Dict, Optional
 from packages.schemas.tasks import Task, TaskStatus
 from services.model_router.router import ModelRouter
+from services.orchestrator.speech_gate import SpeechDecision, SpeechGate
+
+logger = logging.getLogger("rio.orchestrator.response")
+
+# System prompt that declares R.I.O.'s real OS capabilities.
+# This prevents the LLM from saying "I can't access your computer."
+_SYSTEM_PROMPT = (
+    "You are R.I.O. (Reasoning Intelligence Orchestration), a personal AI operating system "
+    "running natively on the user's computer.\n\n"
+    "CRITICAL CAPABILITIES — You HAVE these abilities and must NEVER deny them:\n"
+    "- You can open, close, minimize, maximize, and focus any application on the user's laptop\n"
+    "- You can control the web browser (navigate, click, type, search)\n"
+    "- You can read and write files on the local filesystem\n"
+    "- You can query system telemetry (CPU, RAM, GPU, battery, disk, processes)\n"
+    "- You can take screenshots, control windows, and observe the desktop\n"
+    "- You can send messages, execute code, and manage background tasks\n\n"
+    "NEVER say 'I cannot access your computer', 'As an AI I cannot', or similar refusals.\n"
+    "If an action is requested, execute it — do not explain why you can't.\n\n"
+    "RESPONSE STYLE:\n"
+    "- Be extremely concise. No filler. No pleasantries unless the user initiates them.\n"
+    "- Do NOT add 'How can I help?', 'Let me know if you need anything', or similar.\n"
+    "- After answering, STOP. Do not offer follow-up assistance unprompted.\n"
+    "- When writing math, use standard LaTeX: $$...$$ for display, $...$ for inline.\n"
+    "- Use markdown headings, bold, lists, and code blocks for structured answers.\n"
+    "- Never expose internal JSON, tool schemas, or system architecture."
+)
 
 
 class ResponseEngine:
@@ -22,8 +51,17 @@ class ResponseEngine:
         task: Optional[Task] = None,
         context: Optional[Dict[str, Any]] = None,
         developer_mode: bool = False,
+        speech_decision: Optional[SpeechDecision] = None,
     ) -> str:
-        """Generate a natural conversational reply."""
+        """Generate a natural conversational reply.
+
+        If speech_decision is SILENT, returns empty string immediately (zero LLM calls).
+        """
+
+        # ── FRIDAY MODE: Silence gate ──
+        if speech_decision == SpeechDecision.SILENT:
+            logger.debug("ResponseEngine: SILENT — no response generated")
+            return ""
 
         # 1. If it was a task that failed or errored
         if task and task.status == TaskStatus.FAILED:
@@ -70,7 +108,7 @@ class ResponseEngine:
             # WhatsApp message
             if "whatsapp" in msg_lower and ("send" in msg_lower or "message" in msg_lower or "hi" in msg_lower or "hello" in msg_lower):
                 import re
-                m_contact = re.search(r"(?:to contact named|to contact|to)\s+['\"]?([^'\"\.,]+)['\"]?", user_message, re.IGNORECASE)
+                m_contact = re.search(r"(?:to contact named|to contact|to)\s+['\"]?([^'\"\\.,]+)['\"]?", user_message, re.IGNORECASE)
                 contact = m_contact.group(1).strip() if m_contact else "the contact"
                 return f"Done. I've sent the message to {contact}. Please check WhatsApp."
 
@@ -100,6 +138,8 @@ class ResponseEngine:
                 cleaned = re.sub(r"^(?:open|launch)\s+", "", user_message, flags=re.IGNORECASE)
                 cleaned = re.sub(r"\s+on\s+(?:my\s+)?(?:laptop|desktop|workstation|pc|phone|android|mobile|server)$", "", cleaned, flags=re.IGNORECASE).strip()
                 
+                cleaned = cleaned.rstrip(".!?,;:")
+                
                 # Attach direct deep link if available
                 clean_k = cleaned.lower().replace(" ", "").replace("_", "").replace("-", "")
                 link_str = ""
@@ -111,26 +151,23 @@ class ResponseEngine:
                 
                 return f"Done. {cleaned.title()} is open.{link_str}"
 
+            # Check for local system telemetry findings
+            for step in reversed(task.plan.steps):
+                if step.agent_id == "local_system_agent" and step.result and isinstance(step.result, dict):
+                    msg = step.result.get("message")
+                    if msg:
+                        return msg
+
             if any(k in msg_lower for k in ("qaoa", "vqe", "quantum")):
                 return "Quantum simulation completed and classically verified. The optimal solution has been computed."
 
             return f"Done. I've completed the task: '{task.goal}'."
 
 
-        # 3. Conversational chit-chat response synthesis (via Llama 3.3 70B / Fast Router)
+        # 3. Conversational response synthesis (via LLM)
         try:
             recent_turns = (context or {}).get("recent_turns", [])
-            system_prompt = (
-                "You are R.I.O. (Reasoning Intelligence Orchestration), a sophisticated, helpful, and precise personal AI operating system.\n"
-                "Guidelines:\n"
-                "- Speak naturally, clearly, and concisely without robotic meta-commentary.\n"
-                "- Never expose internal JSON, tool schemas, or system architecture details.\n"
-                "- When writing mathematical equations, formulas, vectors, or matrices, format them in standard Markdown/LaTeX:\n"
-                "  * Use $$...$$ or \\[...\\] for display equations and matrices (e.g. $$\\mathbf{a} = \\begin{bmatrix} 4 \\\\ -2 \\\\ 5 \\end{bmatrix}$$).\n"
-                "  * Use $...$ or \\(...\\) for inline math.\n"
-                "- Use clear markdown headings (##, ###), bold text, numbered lists, and code blocks for structured answers."
-            )
-            messages = [{"role": "system", "content": system_prompt}]
+            messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
             for turn in recent_turns:
                 messages.append({"role": turn["role"], "content": turn["content"]})
             messages.append({"role": "user", "content": user_message})
@@ -141,6 +178,8 @@ class ResponseEngine:
                 temperature=0.7,
                 max_tokens=None,  # No limit - allow full natural generation up to model context window
             )
-            return llm_res.get("content", "I'm here to help. What would you like to do?")
-        except Exception:
-            return "Hey! I'm doing great. How about you?"
+            content = llm_res.get("content")
+            return content if content else ""
+        except Exception as e:
+            logger.warning("Conversational LLM generation failed or offline: %s", e)
+            return "I am currently operating in local fallback mode. Local host monitoring, process control, and system telemetry remain fully active."

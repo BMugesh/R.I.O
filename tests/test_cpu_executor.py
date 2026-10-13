@@ -1,4 +1,8 @@
 """Test CPU Executor for local processing in R.I.O. (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from services.compute.cpu_executor import CPUExecutor

@@ -23,5 +23,11 @@ async def transcribe_speech(
 
 @router.post("/synthesize")
 async def synthesize_speech(text: str, container: Container = Depends(get_container)):
-    """Text-to-speech synthesis endpoint placeholder."""
-    return {"status": "success", "audio_url": None, "text": text}
+    """Text-to-speech synthesis endpoint using local TTSManager."""
+    result = await container.tts_manager.speak(text, priority=True)
+    return {
+        "status": "success" if result.success else "failed",
+        "duration_seconds": result.duration_seconds,
+        "voice": result.voice_used,
+        "text": text,
+    }

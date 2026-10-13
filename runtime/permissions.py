@@ -7,7 +7,7 @@ or external triggers must map to an explicitly enabled capability permission.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from runtime.device_manager import get_rio_config_dir
 
 logger = logging.getLogger("rio.runtime.permissions")
@@ -20,6 +20,8 @@ class Capability:
     KEYBOARD_CONTROL = "keyboard.control"
     APPLICATION_LAUNCH = "application.launch"
     APPLICATION_CLOSE = "application.close"
+    APPLICATION_FOCUS = "application.focus"
+    APPLICATION_CONTROL = "application.control"
     BROWSER_CONTROL = "browser.control"
     FILESYSTEM_READ = "filesystem.read"
     FILESYSTEM_WRITE = "filesystem.write"
@@ -34,6 +36,8 @@ DEFAULT_PERMISSIONS: Dict[str, bool] = {
     Capability.KEYBOARD_CONTROL: True,
     Capability.APPLICATION_LAUNCH: True,
     Capability.APPLICATION_CLOSE: True,
+    Capability.APPLICATION_FOCUS: True,
+    Capability.APPLICATION_CONTROL: True,
     Capability.BROWSER_CONTROL: True,
     Capability.FILESYSTEM_READ: True,
     Capability.FILESYSTEM_WRITE: False,
@@ -67,6 +71,17 @@ ACTION_CAPABILITY_MAP: Dict[str, str] = {
     "application.launch": Capability.APPLICATION_LAUNCH,
     "close_application": Capability.APPLICATION_CLOSE,
     "application.close": Capability.APPLICATION_CLOSE,
+    "focus_application": Capability.APPLICATION_FOCUS,
+    "application.focus": Capability.APPLICATION_FOCUS,
+    "application.minimize": Capability.APPLICATION_CONTROL,
+    "application.maximize": Capability.APPLICATION_CONTROL,
+    "application.switch": Capability.APPLICATION_CONTROL,
+    "application.input": Capability.KEYBOARD_CONTROL,
+    "application.control": Capability.APPLICATION_CONTROL,
+    "application.discover": "status",
+    "application.resolve": "status",
+    "application.status": "status",
+    "application.window.read": Capability.SCREEN_READ,
     # Browser
     "browser_navigate": Capability.BROWSER_CONTROL,
     "browser.control": Capability.BROWSER_CONTROL,
@@ -157,3 +172,9 @@ class PermissionManager:
     def get_active_capabilities(self) -> List[str]:
         """Return list of all currently enabled capabilities."""
         return [cap for cap, enabled in self._permissions.items() if enabled]
+
+    def is_protected_target(self, target_or_payload: Any) -> bool:
+        """Enforce strict security boundary against credential vaults, password managers, and secrets."""
+        from runtime.app_controller import UniversalAppController
+        text = str(target_or_payload).lower()
+        return UniversalAppController.is_protected(text)

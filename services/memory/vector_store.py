@@ -1,23 +1,60 @@
-"""Vector Store Implementation for R.I.O. Long-term Semantic Memory.
-
-Connects to PostgreSQL + pgvector with fallback to in-memory cosine similarity
-when running in lightweight local or mock mode.
-"""
-
+import json
+import logging
 import math
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import numpy as np
 from packages.schemas.memory import MemoryItem, MemoryQuery, MemoryType
 
+logger = logging.getLogger("rio.memory.vector_store")
+
 
 class VectorStore:
-    """Vector Store backed by PostgreSQL/pgvector or In-Memory index."""
+    """Vector Store backed by PostgreSQL/pgvector or In-Memory index with JSON disk persistence."""
 
-    def __init__(self, db_url: Optional[str] = None):
+    def __init__(self, db_url: Optional[str] = None, storage_path: Optional[str] = None):
         self.db_url = db_url or os.getenv("DATABASE_URL")
+        default_path = os.getenv("RIO_MEMORY_PATH", os.path.join(os.getcwd(), "data", "memories.json"))
+        self.storage_path = Path(storage_path or default_path) if (storage_path or default_path) else None
         # In-memory storage cache
         self._in_memory_items: Dict[str, MemoryItem] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Load persisted memory items from disk."""
+        if not self.storage_path or not self.storage_path.exists():
+            return
+        try:
+            with open(self.storage_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for item_data in data:
+                        item = MemoryItem(**item_data)
+                        self._in_memory_items[item.id] = item
+            logger.info(f"Loaded {len(self._in_memory_items)} memories from {self.storage_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load memories from {self.storage_path}: {e}")
+
+    def _save(self) -> None:
+        """Persist memory items to disk."""
+        if not self.storage_path:
+            return
+        try:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.storage_path, "w", encoding="utf-8") as f:
+                json.dump([item.model_dump() for item in self._in_memory_items.values()], f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save memories to {self.storage_path}: {e}")
+
+    def clear(self) -> None:
+        """Clear memory cache and remove storage file."""
+        self._in_memory_items.clear()
+        if self.storage_path and self.storage_path.exists():
+            try:
+                self.storage_path.unlink()
+            except Exception:
+                pass
 
     def _generate_mock_embedding(self, text: str, dim: int = 1536) -> List[float]:
         """Generate a normalized token-hash embedding vector from text."""
@@ -41,8 +78,7 @@ class VectorStore:
             item.embedding = self._generate_mock_embedding(item.content)
 
         self._in_memory_items[item.id] = item
-        # If DB connection is available, insert into PostgreSQL
-        # (Asyncpg integration hook for containerized runs)
+        self._save()
         return item.id
 
     async def search(self, query: MemoryQuery) -> List[MemoryItem]:
@@ -72,6 +108,7 @@ class VectorStore:
         """Delete a memory item by ID."""
         if memory_id in self._in_memory_items:
             del self._in_memory_items[memory_id]
+            self._save()
             return True
         return False
 
@@ -86,4 +123,6 @@ class VectorStore:
 
         for mid in to_delete:
             del self._in_memory_items[mid]
+        if to_delete:
+            self._save()
         return len(to_delete)

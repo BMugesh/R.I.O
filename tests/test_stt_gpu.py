@@ -1,4 +1,8 @@
 """Test Local & Hybrid STT Service (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.gpu
+
+
 
 import pytest
 from services.inference.stt import SpeechToTextService, get_stt_service

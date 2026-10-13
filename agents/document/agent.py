@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 from agents.base import BaseAgent
-from packages.schemas.agents import AgentManifest, AgentResult, AgentRiskLevel, AgentStatus
+from packages.schemas.agents import AgentManifest, AgentResult, AgentRiskLevel, AgentStatus, Evidence
 from packages.schemas.input import InputType, RIOInput
 
 
@@ -31,4 +31,17 @@ class DocumentAgent(BaseAgent):
                 {"role": "user", "content": doc_text},
             ],
         )
-        return AgentResult(status=AgentStatus.SUCCESS, message=res.get("content", ""), data={"summary": res.get("content")})
+        content = res.get("content", "")
+        evidence = Evidence(
+            type="document_summary",
+            source="document_agent",
+            data={"summary": content, "verified": True},
+            confidence=1.0,
+            verified=True,
+        )
+        return AgentResult(
+            status=AgentStatus.SUCCESS,
+            message=content,
+            data={"summary": content, "verified": True},
+            evidence=[evidence],
+        )

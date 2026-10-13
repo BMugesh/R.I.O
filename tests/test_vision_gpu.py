@@ -1,4 +1,8 @@
 """Test GPU Vision Inference Service (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.gpu
+
+
 
 import pytest
 from services.inference.vision import VisionInferenceService, get_vision_service

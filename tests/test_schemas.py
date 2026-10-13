@@ -1,4 +1,8 @@
 """Unit tests for R.I.O. universal schemas."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from packages.schemas import (

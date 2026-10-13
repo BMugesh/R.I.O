@@ -1,4 +1,8 @@
 """Test GPU Executor and persistent model workers (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.gpu
+
+
 
 import pytest
 from services.compute.gpu_executor import GPUExecutor

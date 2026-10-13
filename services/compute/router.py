@@ -134,6 +134,17 @@ class ComputeRouter:
             "metrics": metrics_summary,
         }
 
+    def shutdown(self) -> None:
+        """Shutdown CPU thread pool and evict GPU workers."""
+        try:
+            self.cpu_executor.shutdown()
+        except Exception:
+            pass
+        try:
+            self.gpu_executor.shutdown()
+        except Exception:
+            pass
+
 
 # Global singleton
 _compute_router: Optional[ComputeRouter] = None

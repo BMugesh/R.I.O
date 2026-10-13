@@ -14,6 +14,7 @@ from agents.quantum.agent import QuantumAgent
 from agents.research.agent import ResearchAgent
 from agents.verification.agent import VerificationAgent
 from agents.vision.agent import VisionAgent
+from agents.system.agent import LocalSystemAgent
 from services.device_registry.registry import DeviceRegistry
 from services.device_router.router import DeviceRouter
 from services.mcp.registry import MCPRegistry
@@ -25,6 +26,8 @@ from services.safety.approval_engine import ApprovalEngine
 from services.safety.policy_engine import PolicyEngine
 from services.tool_router.registry import ToolRegistry
 from services.verification.engine import VerificationEngine
+from services.voice.manager import VoiceRuntimeManager
+from services.voice.tts import TTSManager
 
 
 class Container:
@@ -41,6 +44,8 @@ class Container:
         self.tool_registry = ToolRegistry()
         self.mcp_registry = MCPRegistry(tool_registry=self.tool_registry)
         self.quantum_engine = QuantumEngine()
+        self.tts_manager = TTSManager()
+        self.voice_runtime_manager = VoiceRuntimeManager(tts_manager=self.tts_manager)
 
         # Orchestrator
         self.orchestrator = RIOOrchestrator(
@@ -51,6 +56,13 @@ class Container:
             verification_engine=self.verification_engine,
             device_router=self.device_router,
         )
+
+        from services.conversation.manager import ConversationManager
+        self.conversation_manager = ConversationManager(
+            orchestrator=self.orchestrator,
+            model_router=self.model_router,
+        )
+        self.voice_runtime_manager.command_handler = lambda text: self.conversation_manager.handle_user_utterance(text)
 
 
         # Register all 14 Agents
@@ -69,6 +81,8 @@ class Container:
             "verification_agent": VerificationAgent(model_router=self.model_router),
             "memory_agent": MemoryAgent(model_router=self.model_router),
             "quantum_agent": QuantumAgent(quantum_engine=self.quantum_engine, model_router=self.model_router),
+            "local_system_agent": LocalSystemAgent(model_router=self.model_router),
+            "system_agent": LocalSystemAgent(model_router=self.model_router),
         }
 
         for agent_id, agent_inst in self.agents.items():

@@ -1,4 +1,8 @@
 """Comprehensive Unit and Integration Tests for Device Registry."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import json
 from pathlib import Path

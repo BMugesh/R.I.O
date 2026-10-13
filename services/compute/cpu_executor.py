@@ -3,6 +3,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import os
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -18,6 +19,12 @@ class CPUExecutor:
     def __init__(self, max_workers: int = 4):
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="rio-cpu-worker")
         self._handlers: Dict[str, Callable[[Any], Any]] = {}
+        if os.getenv("RIO_ENV") == "test":
+            try:
+                from services.test_governor.governor import get_test_governor
+                get_test_governor().thread_tracker.register_pool(self.executor)
+            except Exception:
+                pass
 
     def register_handler(self, workload_type: str, handler: Callable[[Any], Any]) -> None:
         """Register a specialized CPU execution function for a workload type."""

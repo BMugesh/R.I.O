@@ -1,4 +1,8 @@
 """Test Local Embedding Service and GPU acceleration (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.gpu
+
+
 
 import math
 import pytest

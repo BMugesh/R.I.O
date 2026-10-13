@@ -64,7 +64,7 @@ class GroqProvider(BaseModelProvider):
     ) -> Dict[str, Any]:
         """Generate response via Groq API."""
         key = self._get_api_key()
-        if not key:
+        if not key or (os.getenv("RIO_ENV") == "test" and not os.getenv("ALLOW_TEST_NETWORK")):
             return {
                 "content": f"[Mock Groq ({model})] Response to: {messages[-1]['content'] if messages else ''}",
                 "role": "assistant",
@@ -153,12 +153,15 @@ class GroqProvider(BaseModelProvider):
     ) -> str:
         """Transcribe audio bytes using Groq Whisper."""
         key = self._get_api_key()
-        if not key:
+        if not key or (os.getenv("RIO_ENV") == "test" and not os.getenv("ALLOW_TEST_NETWORK")):
             return "[Mock Transcription] Audio processed successfully."
 
         headers = {"Authorization": f"Bearer {key}"}
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
-        data: Dict[str, Any] = {"model": model}
+        data: Dict[str, Any] = {
+            "model": model,
+            "prompt": "Hey RIO, R.I.O., Rio, Wake up RIO, Friday, Hello, Yes, Computer, Chrome, VS Code, open, run, status, stop.",
+        }
         if language:
             data["language"] = language
 

@@ -23,6 +23,10 @@ Comprehensive automated verification across all 20 sections of the
 - Section 19: Simultaneous Dual-Device Isolation
 - Section 20: 5 Final Golden Acceptance Tests
 """
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import asyncio
 from datetime import datetime, timezone

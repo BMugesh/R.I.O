@@ -94,3 +94,16 @@ class GPUExecutor:
                 success=False,
                 error=str(e),
             )
+
+    def shutdown(self) -> None:
+        """Evict loaded model workers and trigger GPU memory reclamation."""
+        self._workers.clear()
+        try:
+            import gc
+            gc.collect()
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        logger.info("GPUExecutor workers evicted and memory cache cleared.")

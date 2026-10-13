@@ -63,6 +63,13 @@ class TaskStep(BaseModel):
     max_retries: int = 3
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+    parallelizable: bool = True
+    estimated_duration_ms: Optional[int] = None
+    estimated_memory_mb: Optional[int] = None
+    estimated_vram_mb: Optional[int] = None
+    verification_level: Optional[str] = None
+    priority: str = "normal"
+    is_idempotent: bool = True
 
 
 class TaskPlan(BaseModel):
@@ -73,6 +80,17 @@ class TaskPlan(BaseModel):
     estimated_duration_seconds: float = 0.0
     is_approved: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    analysis: Optional[Dict[str, Any]] = None
+    execution_stages: List[List[str]] = Field(default_factory=list)
+    max_parallelism: int = 1
+
+
+class AutonomyBudget(BaseModel):
+    """Execution constraints and boundaries to prevent infinite autonomy loops."""
+    max_runtime_seconds: float = 120.0
+    max_total_steps: int = 20
+    max_replans: int = 2
+    max_retries_per_step: int = 2
 
 
 class Task(BaseModel):
@@ -84,6 +102,7 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     plan: Optional[TaskPlan] = None
     risk_level: AgentRiskLevel = AgentRiskLevel.LOW
+    budget: Optional[AutonomyBudget] = Field(default_factory=AutonomyBudget)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     completed_at: Optional[str] = None

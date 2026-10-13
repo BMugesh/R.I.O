@@ -12,6 +12,10 @@ Test Matrix:
 6. Device Router 5-Tier Priority Matrix
 7. Security Boundary Enforcement
 """
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 from pathlib import Path
 import tempfile

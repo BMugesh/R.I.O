@@ -1,4 +1,8 @@
 """Comprehensive Unit and Integration Tests for Device Router."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 from pathlib import Path
 import tempfile

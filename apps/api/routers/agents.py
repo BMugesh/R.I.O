@@ -13,7 +13,13 @@ tools_router = APIRouter(prefix="/tools", tags=["Tools"])
 @agents_router.get("", response_model=List[AgentManifest])
 async def list_agents(container: Container = Depends(get_container)):
     """List all registered agents and their declarations."""
-    return [agent.manifest for agent in container.agents.values()]
+    seen_ids = set()
+    manifests = []
+    for agent in container.agents.values():
+        if agent.manifest.id not in seen_ids:
+            seen_ids.add(agent.manifest.id)
+            manifests.append(agent.manifest)
+    return manifests
 
 
 @tools_router.get("", response_model=List[ToolDefinition])

@@ -1,4 +1,8 @@
 """End-to-End Tests for Compute Fabric & Profiling in R.I.O. (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import pytest
 from packages.schemas.chat import ChatRequest

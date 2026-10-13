@@ -1,4 +1,8 @@
 """Unit tests for Safety and Approval subsystem."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from packages.schemas.agents import AgentRiskLevel

@@ -60,17 +60,52 @@ class DeviceAgent(BaseAgent):
                 evidence=[evidence],
             )
 
-        # Standard Device Registry status query
-        evidence = Evidence(
-            type="device_observation",
-            source="device_registry",
-            data={"status": "online", "device_id": "laptop-01", "verified": True},
-            confidence=1.0,
-            verified=True,
-        )
-        return AgentResult(
-            status=AgentStatus.SUCCESS,
-            message="Device is online and responsive.",
-            data={"device_id": "laptop-01", "status": "online", "type": "laptop", "verified": True},
-            evidence=[evidence],
-        )
+        # Query real Device Registry status
+        from services.device_registry.registry import DeviceRegistry
+        registry = DeviceRegistry()
+        dev_id = payload.get("device_id") or payload.get("target_device") or payload.get("device") or "laptop-01"
+        if dev_id == "laptop":
+            dev_id = "laptop-01"
+        elif dev_id in ("phone", "android"):
+            dev_id = "android-01"
+
+        target_dev = registry.get_device(dev_id) or registry.get_device_by_name(dev_id)
+        if target_dev:
+            is_online = (target_dev.status.value.lower() == "online" if hasattr(target_dev.status, "value") else str(target_dev.status).lower() == "online")
+            obs_data = {
+                "device_id": target_dev.device_id,
+                "name": target_dev.name,
+                "status": "online" if is_online else "offline",
+                "type": target_dev.type.value if hasattr(target_dev.type, "value") else str(target_dev.type),
+                "platform": target_dev.platform,
+                "verified": is_online,
+            }
+            evidence = Evidence(
+                type="device_observation",
+                source="device_registry",
+                data=obs_data,
+                confidence=1.0 if is_online else 0.4,
+                verified=is_online,
+            )
+            return AgentResult(
+                status=AgentStatus.SUCCESS if is_online else AgentStatus.FAILED,
+                message=f"Device '{target_dev.name}' ({target_dev.device_id}) is {obs_data['status']}.",
+                data=obs_data,
+                evidence=[evidence],
+            )
+        else:
+            obs_data = {"device_id": dev_id, "status": "unknown", "verified": False}
+            evidence = Evidence(
+                type="device_observation",
+                source="device_registry",
+                data=obs_data,
+                confidence=0.0,
+                verified=False,
+            )
+            return AgentResult(
+                status=AgentStatus.FAILED,
+                message=f"Device '{dev_id}' is not registered in Device Registry.",
+                data=obs_data,
+                evidence=[evidence],
+            )
+

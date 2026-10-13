@@ -1,4 +1,8 @@
 """Unit tests for MCP integration and audit logging."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from packages.schemas.tools import MCPManifest, ToolDefinition

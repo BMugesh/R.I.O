@@ -20,10 +20,12 @@ from services.memory.memory_manager import MemoryManager
 from services.model_router.router import ModelRouter
 from services.orchestrator.context_engine import ContextEngine
 from services.orchestrator.dag_planner import DAGPlanner
+from services.planning.planner import IntelligentPlanner
 from services.orchestrator.execution_engine import ExecutionEngine
 from services.orchestrator.input_processor import InputProcessor
 from services.orchestrator.intent_engine import IntentEngine
 from services.orchestrator.response_engine import ResponseEngine
+from services.orchestrator.speech_gate import SpeechDecision, SpeechGate
 from services.safety.approval_engine import ApprovalEngine
 from services.safety.policy_engine import PolicyEngine
 from services.scheduler.scheduler import ScheduledTaskState, TaskScheduler
@@ -70,6 +72,7 @@ class RIOOrchestrator:
             model_router=self.model_router,
             device_router=self.device_router,
         )
+        self.intelligent_planner = IntelligentPlanner(dag_planner_fallback=self.dag_planner)
         self.execution_engine = ExecutionEngine(
             approval_engine=self.approval_engine,
             verification_engine=self.verification_engine,
@@ -123,6 +126,56 @@ class RIOOrchestrator:
         with self.tracer.span("intent_detection", SpanType.INTENT):
             intent_info = await self.intent_engine.classify_intent(request.message, context)
 
+        # ── FRIDAY MODE: Speech Decision Gate ──
+        # Evaluate whether R.I.O. should speak BEFORE generating any response.
+        # This prevents Groq calls for dismissals ("thanks", "okay", "good", etc.)
+        speech_decision = SpeechGate.evaluate(
+            user_message=request.message,
+            intent_info=intent_info,
+        )
+
+        # If the user sent a dismissal (conversation-ending token), return immediately.
+        # Zero Groq calls. Zero TTS. Zero filler.
+        if speech_decision == SpeechDecision.SILENT:
+            completed_trace = self.tracer.end_trace(task_id=session_id)
+            return ChatResponse(
+                session_id=session_id,
+                reply="",
+                task_id=None,
+                status="completed",
+                developer_trace=None,
+            )
+
+        # ── Handle instant Stop/Halt ──
+        if intent_info.get("is_stop", False):
+            for tid in list(self._active_tasks.keys()):
+                self.execution_engine.cancel_task(tid)
+            reply_text = "Stopped."
+            await self.memory_manager.add_conversation_turn(session_id=session_id, role="user", content=request.message)
+            await self.memory_manager.add_conversation_turn(session_id=session_id, role="assistant", content=reply_text)
+            self.tracer.end_trace(task_id=session_id)
+            return ChatResponse(
+                session_id=session_id,
+                reply=reply_text,
+                task_id=None,
+                status="completed",
+                developer_trace=None,
+            )
+
+        # ── Handle Standby ──
+        if intent_info.get("is_standby", False):
+            reply_text = "Standing by."
+            await self.memory_manager.add_conversation_turn(session_id=session_id, role="user", content=request.message)
+            await self.memory_manager.add_conversation_turn(session_id=session_id, role="assistant", content=reply_text)
+            self.tracer.end_trace(task_id=session_id)
+            return ChatResponse(
+                session_id=session_id,
+                reply=reply_text,
+                task_id=None,
+                status="completed",
+                developer_trace=None,
+            )
+
         task_obj: Optional[Task] = None
         reply_text = ""
 
@@ -133,7 +186,7 @@ class RIOOrchestrator:
             
             # Generate DAG Plan
             with self.tracer.span("dag_planning", SpanType.PLANNING):
-                plan = await self.dag_planner.create_plan(goal=request.message, context=context)
+                plan = await self.intelligent_planner.plan(goal=request.message, context=context)
             task_obj = Task(
                 session_id=session_id,
                 user_id=user_id,
@@ -167,6 +220,13 @@ class RIOOrchestrator:
                 # Execute Task Graph immediately
                 task_obj = await self.execution_engine.execute_task(task_obj, context=context)
 
+                # Re-evaluate speech decision after task execution
+                task_speech = SpeechGate.evaluate(
+                    user_message=request.message,
+                    intent_info=intent_info,
+                    task_status=task_obj.status.value if task_obj else None,
+                )
+
                 # Synthesize verified natural response
                 with self.tracer.span("response_synthesis", SpanType.RESPONSE):
                     reply_text = await self.response_engine.generate_response(
@@ -174,20 +234,26 @@ class RIOOrchestrator:
                         task=task_obj,
                         context=context,
                         developer_mode=request.developer_mode,
+                        speech_decision=task_speech,
                     )
         else:
-            # Conversational path
-            with self.tracer.span("response_synthesis", SpanType.RESPONSE):
-                reply_text = await self.response_engine.generate_response(
-                    user_message=request.message,
-                    task=None,
-                    context=context,
-                    developer_mode=request.developer_mode,
-                )
+            # Conversational path — greetings get a brief "Yes?" response
+            if intent_info.get("is_greeting", False):
+                reply_text = "Yes?"
+            else:
+                with self.tracer.span("response_synthesis", SpanType.RESPONSE):
+                    reply_text = await self.response_engine.generate_response(
+                        user_message=request.message,
+                        task=None,
+                        context=context,
+                        developer_mode=request.developer_mode,
+                        speech_decision=speech_decision,
+                    )
 
-        # 5. Record conversational turns in memory
+        # 5. Record conversational turns in memory (skip for empty/silent responses)
         await self.memory_manager.add_conversation_turn(session_id=session_id, role="user", content=request.message)
-        await self.memory_manager.add_conversation_turn(session_id=session_id, role="assistant", content=reply_text)
+        if reply_text:
+            await self.memory_manager.add_conversation_turn(session_id=session_id, role="assistant", content=reply_text)
 
         # Finish Profiler Trace
         completed_trace = self.tracer.end_trace(task_id=session_id)

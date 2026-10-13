@@ -16,16 +16,22 @@ class CacheStore:
     def __init__(self, redis_url: Optional[str] = None):
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self._redis_client: Optional[aioredis.Redis] = None
+        self._redis_failed: bool = (os.getenv("RIO_ENV") == "test")
         self._local_cache: Dict[str, Any] = {}
 
     async def _get_client(self):
-        if aioredis is None:
+        if aioredis is None or self._redis_failed:
             return None
         if self._redis_client is None:
             try:
-                self._redis_client = aioredis.from_url(self.redis_url, decode_responses=True)
+                self._redis_client = aioredis.from_url(
+                    self.redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=0.2,
+                )
                 await self._redis_client.ping()
             except Exception:
+                self._redis_failed = True
                 self._redis_client = None
         return self._redis_client
 

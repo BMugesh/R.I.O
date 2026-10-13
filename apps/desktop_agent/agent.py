@@ -162,16 +162,20 @@ class DesktopAgent:
                         import asyncio
                         import pyautogui
                         import pyperclip
+                        from runtime.app_controller import UniversalAppController
+                        UniversalAppController.focus("whatsapp")
+                        await asyncio.sleep(0.3)
                         pyautogui.hotkey("ctrl", "f")
-                        await asyncio.sleep(0.4)
+                        await asyncio.sleep(0.3)
                         pyperclip.copy(str(query))
                         pyautogui.hotkey("ctrl", "v")
                         await asyncio.sleep(1.0)
-                        pyautogui.press("enter")
-                        await asyncio.sleep(0.6)
+                        pyautogui.click(200, 320)
+                        await asyncio.sleep(0.5)
+                        pyautogui.click(650, 1030)
                     except Exception:
                         pass
-                coords = params.get("coordinates", {"x": 100, "y": 200})
+                coords = params.get("coordinates", {"x": 650, "y": 1030})
                 return DeviceObservation(
                     command_id=command.command_id,
                     device_id=self.device_id,
@@ -188,7 +192,11 @@ class DesktopAgent:
                         import asyncio
                         import pyautogui
                         import pyperclip
+                        from runtime.app_controller import UniversalAppController
+                        UniversalAppController.focus("whatsapp")
                         await asyncio.sleep(0.3)
+                        pyautogui.click(650, 1030)
+                        await asyncio.sleep(0.2)
                         pyperclip.copy(str(text))
                         pyautogui.hotkey("ctrl", "v")
                         await asyncio.sleep(0.3)

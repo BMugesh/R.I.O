@@ -1,4 +1,8 @@
 """Test Performance Profiler and Task Trace Subsystem (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import asyncio
 import time

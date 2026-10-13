@@ -15,6 +15,7 @@ from agents.device.agent import DeviceAgent
 from agents.verification.agent import VerificationAgent
 from agents.memory.agent import MemoryAgent
 from agents.quantum.agent import QuantumAgent
+from agents.system.agent import LocalSystemAgent
 
 __all__ = [
     "BaseAgent",
@@ -32,4 +33,5 @@ __all__ = [
     "VerificationAgent",
     "MemoryAgent",
     "QuantumAgent",
+    "LocalSystemAgent",
 ]

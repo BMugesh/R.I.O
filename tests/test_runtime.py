@@ -1,4 +1,8 @@
 """Comprehensive Unit and Integration Tests for R.I.O. Background Runtime."""
+import pytest
+pytestmark = pytest.mark.integration
+
+
 
 import asyncio
 from datetime import datetime, timezone

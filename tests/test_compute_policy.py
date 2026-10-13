@@ -1,4 +1,8 @@
 """Test Compute Routing Policy and rules (Milestone 4)."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from services.compute.policy import ComputePolicy, DEFAULT_COMPUTE_POLICY

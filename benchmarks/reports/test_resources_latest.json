@@ -1,0 +1,58 @@
+{
+  "session_completed_at": "2026-09-14T08:17:24.305979+00:00",
+  "summary": {
+    "total": 36,
+    "passed": 36,
+    "failed": 0
+  },
+  "metrics": {
+    "start": {
+      "timestamp": "2026-09-14T08:17:14.677706+00:00",
+      "ram_total_mb": 15599.4,
+      "ram_available_mb": 5935.89,
+      "process_rss_mb": 544.21,
+      "process_peak_rss_mb": 544.23,
+      "gpu_total_mb": 6140.5,
+      "gpu_used_mb": 0.0,
+      "gpu_free_mb": 6140.5,
+      "thread_count": 1,
+      "process_count": 0,
+      "asyncio_task_count": 0,
+      "thread_names": [
+        "MainThread"
+      ],
+      "child_pids": [],
+      "active_task_names": []
+    },
+    "peak": {
+      "peak_rss_mb": 566.76,
+      "peak_vram_mb": 0.0,
+      "peak_threads": 1,
+      "peak_processes": 0,
+      "peak_tasks": 0
+    },
+    "end": {
+      "timestamp": "2026-09-14T08:17:24.297652+00:00",
+      "ram_total_mb": 15599.4,
+      "ram_available_mb": 5941.49,
+      "process_rss_mb": 566.76,
+      "process_peak_rss_mb": 567.5,
+      "gpu_total_mb": 6140.5,
+      "gpu_used_mb": 0.0,
+      "gpu_free_mb": 6140.5,
+      "thread_count": 1,
+      "process_count": 0,
+      "asyncio_task_count": 0,
+      "thread_names": [
+        "MainThread"
+      ],
+      "child_pids": [],
+      "active_task_names": []
+    }
+  },
+  "leaks": {},
+  "policy": {
+    "min_available_ram_mb": 1024,
+    "gpu_safety_headroom_mb": 800
+  }
+}

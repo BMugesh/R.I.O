@@ -1,4 +1,8 @@
 """Comprehensive Unit Tests for Android Device Runtime Architecture."""
+import pytest
+pytestmark = pytest.mark.hardware
+
+
 
 import asyncio
 import json

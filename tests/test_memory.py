@@ -1,4 +1,8 @@
 """Unit tests for Memory subsystem (short-term & semantic)."""
+import pytest
+pytestmark = pytest.mark.unit
+
+
 
 import pytest
 from services.memory.memory_manager import MemoryManager
