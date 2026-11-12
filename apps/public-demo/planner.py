@@ -409,13 +409,14 @@ async def generate_candidate_plan(
             fallback_reason="groq_api_key_not_configured",
         )
 
-    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip() or "llama-3.3-70b-versatile"
+    default_model = "openai/gpt-oss-120b"
+    model = os.getenv("GROQ_MODEL", default_model).strip() or default_model
     base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 
-    payload = {
+    payload: dict = {
         "model": model,
         "temperature": 0.2,
-        "max_tokens": 700,
+        "max_tokens": 2048,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": _groq_system_prompt()},
@@ -429,6 +430,8 @@ async def generate_candidate_plan(
             },
         ],
     }
+    if "gpt-oss" in model.lower():
+        payload["reasoning_effort"] = "low"
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -443,6 +446,13 @@ async def generate_candidate_plan(
                 json=payload,
                 headers=headers,
             )
+            if getattr(response, "status_code", None) == 404 and model != default_model:
+                retry_payload = dict(payload, model=default_model, reasoning_effort="low")
+                response = await client.post(
+                    f"{base_url}/chat/completions",
+                    json=retry_payload,
+                    headers=headers,
+                )
             response.raise_for_status()
             data = response.json()
 

@@ -984,3 +984,63 @@ def test_frontend_container_and_deployment_manifests():
     assert "paths:\n        - apps/public-demo-web/**" in render_text
     for forbidden in ("apps/api", "apps/web", "agents/", "services/", "runtime/"):
         assert forbidden not in render_text
+
+
+def test_groq_404_retries_default_flagship_model(monkeypatch):
+    """Verify retired custom GROQ_MODEL 404 retries once with openai/gpt-oss-120b before falling back."""
+    import httpx
+
+    seen_models = []
+
+    class ClientRetry404:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None, headers=None, **kwargs):
+            req = httpx.Request("POST", url)
+            seen_models.append(json["model"])
+            if json["model"] == "llama-3.3-70b-versatile":
+                return httpx.Response(404, request=req)
+            return httpx.Response(
+                200,
+                request=req,
+                json={
+                    "model": json["model"],
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    '{"goal_summary": "Compare sandbox docs", '
+                                    '"steps": ['
+                                    '{"action_id": "analyse_task", "title": "Parse", "description": "Parse task", "reasoning_summary": "Parses task.", "depends_on_indices": []},'
+                                    '{"action_id": "read_sample_documents", "title": "Read", "description": "Read docs", "reasoning_summary": "Reads DOC-01..03.", "depends_on_indices": [0]},'
+                                    '{"action_id": "export_report", "title": "Export", "description": "Export report", "reasoning_summary": "Gates export.", "depends_on_indices": [1]},'
+                                    '{"action_id": "complete_simulated_export", "title": "Complete", "description": "Save record", "reasoning_summary": "Saves in memory.", "depends_on_indices": [2]}'
+                                    "]}"
+                                )
+                            }
+                        }
+                    ],
+                },
+            )
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    monkeypatch.setattr(demo_planner.httpx, "AsyncClient", ClientRetry404)
+
+    client = TestClient(demo_main.create_app())
+    res = client.post(
+        "/api/demo/sessions",
+        json={"task": "Compare three sample documents safely."},
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert seen_models == ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
+    assert data["plan"]["planner_source"] == "groq_assisted"
+    assert data["plan"]["planner_model"] == "openai/gpt-oss-120b"

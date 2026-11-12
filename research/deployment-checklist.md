@@ -77,7 +77,7 @@ When syncing [render.yaml](../render.yaml) on Render:
 - **Docker Context / Dockerfile Path:** `.` / `apps/public-demo/Dockerfile`
 - **Health Check Path:** `/health`
 - **Scaling Constraint:** Single container instance / `--workers 1` (default in `Dockerfile`), no Redis or external database.
-- **Env vars:** `PYTHONUNBUFFERED=1`, `APP_ENV=production`, `SESSION_TTL_SECONDS=1800`, `DEMO_STEP_DELAY_MS=150`, `DEMO_ALLOWED_ORIGINS=https://YOUR-FRONTEND-URL.onrender.com`, optional `GROQ_API_KEY` & `GROQ_MODEL=llama-3.3-70b-versatile`.
+- **Env vars:** `PYTHONUNBUFFERED=1`, `APP_ENV=production`, `SESSION_TTL_SECONDS=1800`, `DEMO_STEP_DELAY_MS=150`, `DEMO_ALLOWED_ORIGINS=https://YOUR-FRONTEND-URL.onrender.com`, optional `GROQ_API_KEY` & `GROQ_MODEL=openai/gpt-oss-120b`.
 
 ### Single-Instance Architecture Limitations (Intentionally Without Redis)
 - Both `InMemorySessionStore` (30-min TTL, max 250 active sessions) and `SlidingWindowRateLimiter` (`req`, `create`, `mutate`, `mutate_ip`) reside in single-process RAM to preserve strict dependency isolation and avoid external Redis/DB coupling.
