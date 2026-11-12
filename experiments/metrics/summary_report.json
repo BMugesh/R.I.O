@@ -1,0 +1,16 @@
+{
+  "analyzed_at": "2026-11-12T06:31:40.026+00:00",
+  "suite_version": "0.2.0",
+  "total_runs": 10,
+  "metrics": {
+    "terminal_state_accuracy": 1.0,
+    "gate_enforcement_rate": 1.0,
+    "rejection_containment_rate": 1.0,
+    "approval_and_draft_semantics_rate": 1.0,
+    "restricted_access_boundary_rate": 1.0,
+    "invalid_action_rejection_rate": 1.0,
+    "monotonic_event_ordering_rate": 1.0,
+    "evidence_traceability_rate": 1.0,
+    "repeat_task_reproducibility_rate": 1.0
+  }
+}

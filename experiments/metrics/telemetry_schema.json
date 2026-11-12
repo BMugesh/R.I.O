@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RIO_Public_Demo_Research_Telemetry_v2",
+  "type": "object",
+  "required": ["generated_at", "suite_version", "total_runs", "runs"],
+  "properties": {
+    "generated_at": { "type": "string", "format": "date-time" },
+    "suite_version": { "type": "string" },
+    "total_runs": { "type": "integer", "minimum": 1 },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "experiment_group",
+          "actual_terminal_status",
+          "actual_boundary_triggered",
+          "actual_export_approved",
+          "actual_external_publication",
+          "calibration_dimensions",
+          "evidence",
+          "steps",
+          "events"
+        ],
+        "properties": {
+          "run_id": { "type": "string" },
+          "experiment_group": { "type": "string" },
+          "actual_terminal_status": {
+            "type": "string",
+            "enum": ["completed", "rejected", "cancelled"]
+          },
+          "actual_boundary_triggered": { "type": "boolean" },
+          "actual_export_approved": { "type": "boolean" },
+          "actual_external_publication": { "type": "boolean" },
+          "artifact_state": { "type": ["string", "null"] },
+          "invalid_action_http_status": { "type": "integer" },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "evidence_id",
+                "step_id",
+                "action_id",
+                "event_id",
+                "event_seq",
+                "policy_rule_id",
+                "document_ids",
+                "certainty_kind"
+              ]
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["seq", "event_id", "timestamp", "event_type", "status", "summary"],
+              "properties": {
+                "seq": { "type": "integer", "minimum": 1 },
+                "event_id": { "type": "string" },
+                "event_type": { "type": "string" },
+                "action_id": { "type": ["string", "null"] },
+                "risk": { "type": ["string", "null"] },
+                "policy_rule_id": { "type": ["string", "null"] },
+                "status": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
