@@ -1091,3 +1091,36 @@ def test_policy_appends_post_gate_step_when_llm_ends_on_gate(monkeypatch):
     assert plan.steps[-2].action_id == demo_schemas.SandboxActionId.EXPORT_REPORT
     assert plan.steps[-1].action_id == demo_schemas.SandboxActionId.COMPLETE_SIMULATED_EXPORT
     assert plan.steps[-2].step_id in plan.steps[-1].depends_on
+
+    # Also handle when an LLM emits a non-export step after the gate (without complete_simulated_export)
+    draft_trailing = demo_planner.PlanDraft(
+        goal_summary="Publish briefing without final export step",
+        planner_source="groq_assisted",
+        planner_model="openai/gpt-oss-120b",
+        steps=[
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.ANALYSE_TASK,
+                title="Parse",
+                description="Parse request",
+                reasoning_summary="Parses task.",
+                depends_on_indices=[],
+            ),
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.PUBLISH_SUMMARY,
+                title="Publish",
+                description="Publish briefing",
+                reasoning_summary="Gates publish.",
+                depends_on_indices=[0],
+            ),
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.VERIFY_CITATIONS,
+                title="Post-check",
+                description="Trailing check",
+                reasoning_summary="Extra step.",
+                depends_on_indices=[1],
+            ),
+        ],
+    )
+    plan2 = demo_engine.apply_deterministic_policy(draft_trailing)
+    assert plan2.steps[-1].action_id == demo_schemas.SandboxActionId.COMPLETE_SIMULATED_EXPORT
+    assert plan2.steps[1].step_id in plan2.steps[-1].depends_on

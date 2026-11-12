@@ -236,20 +236,32 @@ def apply_deterministic_policy(draft: PlanDraft) -> ExecutionPlan:
         if len(draft_steps) > insert_idx + 1:
             draft_steps[insert_idx + 1].depends_on_indices = [insert_idx]
 
-    # Ensure at least one post-gate completion step exists after the final gated step
+    # Ensure a post-gate COMPLETE_SIMULATED_EXPORT step always exists after the final gated step
     # so human approval/rejection always governs downstream finalization.
-    if draft_steps and POLICY_CATALOG[draft_steps[-1].action_id].requires_approval:
+    last_gate_idx = max(
+        (i for i, s in enumerate(draft_steps) if POLICY_CATALOG[s.action_id].requires_approval),
+        default=None,
+    )
+    has_post_gate_export = last_gate_idx is not None and any(
+        s.action_id == SandboxActionId.COMPLETE_SIMULATED_EXPORT
+        for s in draft_steps[last_gate_idx + 1 :]
+    )
+    if last_gate_idx is not None and not has_post_gate_export:
         if len(draft_steps) >= max_steps:
-            gate_step = draft_steps[-1]
-            draft_steps = draft_steps[: max_steps - 2] + [gate_step]
-        gate_idx = len(draft_steps) - 1
+            # Preserve steps up to the final gate within max_steps - 1, then append completion
+            if last_gate_idx >= max_steps - 1:
+                gate_step = draft_steps[last_gate_idx]
+                draft_steps = draft_steps[: max_steps - 2] + [gate_step]
+                last_gate_idx = len(draft_steps) - 1
+            else:
+                draft_steps = draft_steps[: max_steps - 1]
         draft_steps.append(
             type(draft_steps[0])(
                 action_id=SandboxActionId.COMPLETE_SIMULATED_EXPORT,
                 title="Complete simulated export",
                 description="Record the final simulated artifact inside ephemeral session memory.",
                 reasoning_summary="Completes the simulated workflow only after explicit human approval.",
-                depends_on_indices=[gate_idx],
+                depends_on_indices=[last_gate_idx],
             )
         )
 
@@ -1132,27 +1144,41 @@ async def submit_session_decision(
                 "Export action rejected; simulated export step skipped; external publication not performed."
             )
 
-            if rec.simulated_artifact is not None:
-                rec.simulated_artifact = SimulatedArtifact(
-                    artifact_id=rec.simulated_artifact.artifact_id,
-                    title="Unexported In-Memory Draft (Export Rejected)",
-                    format=rec.simulated_artifact.format,
+            existing_citations = (
+                list(rec.simulated_artifact.citations)
+                if rec.simulated_artifact is not None
+                else list(rec.calibration_dimensions.cited_document_ids)
+            )
+            artifact_id = (
+                rec.simulated_artifact.artifact_id
+                if rec.simulated_artifact is not None
+                else generate_short_id("art")
+            )
+            artifact_format = (
+                rec.simulated_artifact.format
+                if rec.simulated_artifact is not None
+                else "markdown_report"
+            )
+            rec.simulated_artifact = SimulatedArtifact(
+                artifact_id=artifact_id,
+                title="Unexported In-Memory Draft (Export Rejected)",
+                format=artifact_format,
+                artifact_state="export_rejected_draft_only",
+                draft_created_in_memory=True,
+                export_approved=False,
+                external_publication_performed=False,
+                simulated_only=True,
+                notice=(
+                    "EXPORT REJECTED: Draft generated in session memory only. "
+                    "Export action rejected; external publication NOT performed."
+                ),
+                content=_build_comparison_markdown(
+                    rec.task,
                     artifact_state="export_rejected_draft_only",
-                    draft_created_in_memory=True,
-                    export_approved=False,
-                    external_publication_performed=False,
-                    simulated_only=True,
-                    notice=(
-                        "EXPORT REJECTED: Draft generated in session memory only. "
-                        "Export action rejected; external publication NOT performed."
-                    ),
-                    content=_build_comparison_markdown(
-                        rec.task,
-                        artifact_state="export_rejected_draft_only",
-                        boundary_triggered=rec.plan.boundary_triggered,
-                    ),
-                    citations=list(rec.simulated_artifact.citations),
-                )
+                    boundary_triggered=rec.plan.boundary_triggered,
+                ),
+                citations=existing_citations,
+            )
 
             rec.what_rio_did.append(
                 f"Halted execution immediately when visitor rejected high-risk action '{gated_step.action_id.value}'."
