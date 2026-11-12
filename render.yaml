@@ -1,0 +1,62 @@
+services:
+  - type: web
+    name: rio-public-demo-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./apps/public-demo/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - apps/public-demo/**
+      ignoredPaths:
+        - apps/public-demo/test_public_demo.py
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: SESSION_TTL_SECONDS
+        value: "1800"
+      - key: DEMO_STEP_DELAY_MS
+        value: "150"
+      - key: DEMO_ALLOWED_ORIGINS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+
+  - type: web
+    name: rio-public-demo-web
+    runtime: static
+    plan: free
+    rootDir: apps/public-demo-web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    buildFilter:
+      paths:
+        - apps/public-demo-web/**
+      ignoredPaths:
+        - apps/public-demo-web/dist/**
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: rio-public-demo-api
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
