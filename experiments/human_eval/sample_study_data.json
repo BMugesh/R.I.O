@@ -1,0 +1,64 @@
+{
+  "dataset_note": "SYNTHETIC VALIDATION FIXTURE ONLY — used to verify score_human_eval.py before real consented participant recruitment.",
+  "synthetic_validation_fixture": true,
+  "participants": [
+    {
+      "participant_id": "SIM_P01",
+      "condition": "rio_gated",
+      "tasks": [
+        { "task_id": "T1_safe_synthesis", "completed": true, "decision_accurate": true, "review_seconds": 14.2 },
+        { "task_id": "T2_reject_under_caveat", "completed": true, "decision_accurate": true, "review_seconds": 19.5 },
+        { "task_id": "T3_midrun_interrupt", "completed": true, "decision_accurate": true, "review_seconds": 11.0 },
+        { "task_id": "T4_boundary_probe", "completed": true, "decision_accurate": true, "review_seconds": 9.8 }
+      ],
+      "comprehension": {
+        "Q1_gate_risk": "b",
+        "Q2_calibration_meaning": "b",
+        "Q3_rejected_draft_semantics": "b",
+        "Q4_evidence_traceability": "b"
+      },
+      "perceived_control": { "PC1": 5, "PC2": 5, "PC3": 5, "PC4": 4 },
+      "sus": {
+        "SUS01": 4, "SUS02": 2, "SUS03": 5, "SUS04": 1, "SUS05": 5,
+        "SUS06": 1, "SUS07": 4, "SUS08": 1, "SUS09": 5, "SUS10": 1
+      },
+      "nasa_tlx": {
+        "mental_demand": 30,
+        "physical_demand": 10,
+        "temporal_demand": 15,
+        "performance": 15,
+        "effort": 25,
+        "frustration": 15
+      }
+    },
+    {
+      "participant_id": "SIM_P02",
+      "condition": "baseline_opaque",
+      "tasks": [
+        { "task_id": "T1_safe_synthesis", "completed": true, "decision_accurate": true, "review_seconds": 5.1 },
+        { "task_id": "T2_reject_under_caveat", "completed": true, "decision_accurate": false, "review_seconds": 4.4 },
+        { "task_id": "T3_midrun_interrupt", "completed": false, "decision_accurate": false, "review_seconds": 6.0 },
+        { "task_id": "T4_boundary_probe", "completed": true, "decision_accurate": false, "review_seconds": 5.8 }
+      ],
+      "comprehension": {
+        "Q1_gate_risk": "a",
+        "Q2_calibration_meaning": "a",
+        "Q3_rejected_draft_semantics": "b",
+        "Q4_evidence_traceability": "c"
+      },
+      "perceived_control": { "PC1": 2, "PC2": 1, "PC3": 2, "PC4": 1 },
+      "sus": {
+        "SUS01": 3, "SUS02": 2, "SUS03": 4, "SUS04": 2, "SUS05": 2,
+        "SUS06": 3, "SUS07": 4, "SUS08": 3, "SUS09": 2, "SUS10": 2
+      },
+      "nasa_tlx": {
+        "mental_demand": 50,
+        "physical_demand": 10,
+        "temporal_demand": 25,
+        "performance": 55,
+        "effort": 45,
+        "frustration": 60
+      }
+    }
+  ]
+}

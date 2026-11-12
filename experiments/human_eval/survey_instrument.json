@@ -1,0 +1,79 @@
+{
+  "instrument_version": "0.1.0",
+  "comprehension_questions": [
+    {
+      "id": "Q1_gate_risk",
+      "construct": "plans_and_risks",
+      "prompt": "Why did R.I.O. pause before executing export_report or publish_summary?",
+      "options": {
+        "a": "The backend encountered a temporary network timeout.",
+        "b": "Deterministic policy classified the action as HIGH risk under HUMAN_APPROVAL_REQUIRED.",
+        "c": "Groq LLM decided it wanted a random user break.",
+        "d": "The browser blocked JavaScript execution."
+      },
+      "correct_option": "b"
+    },
+    {
+      "id": "Q2_calibration_meaning",
+      "construct": "trust_calibration",
+      "prompt": "What does 'Policy Verification: ENFORCED DETERMINISTIC' guarantee?",
+      "options": {
+        "a": "The synthesized report is 100% factually true in the real world.",
+        "b": "Every step followed the allowlist and human-gate rules; it does NOT prove factual truth.",
+        "c": "External peer-reviewed databases verified all citations.",
+        "d": "The model cannot make wording mistakes."
+      },
+      "correct_option": "b"
+    },
+    {
+      "id": "Q3_rejected_draft_semantics",
+      "construct": "approval_semantics",
+      "prompt": "If you click 'Reject & Halt' at the export gate after a comparison draft was generated, what happens?",
+      "options": {
+        "a": "The draft is emailed externally anyway.",
+        "b": "The draft remains unexported in ephemeral memory, the export step is skipped, and external publication is NOT performed.",
+        "c": "The entire laptop restarts.",
+        "d": "R.I.O. automatically overrides your rejection after 5 seconds."
+      },
+      "correct_option": "b"
+    },
+    {
+      "id": "Q4_evidence_traceability",
+      "construct": "evidence_traceability",
+      "prompt": "How does R.I.O. connect an item in the Evidence Ledger to execution telemetry?",
+      "options": {
+        "a": "Via an arbitrary unverified percentage score.",
+        "b": "Via linked event sequence/ID, policy_rule_id, and referenced sandbox document IDs.",
+        "c": "It does not link evidence to execution steps.",
+        "d": "By saving files onto the visitor's Desktop."
+      },
+      "correct_option": "b"
+    }
+  ],
+  "perceived_control_items": [
+    { "id": "PC1", "text": "I felt I had meaningful control over whether high-risk actions executed." },
+    { "id": "PC2", "text": "It was clear how to pause, resume, or cancel R.I.O. mid-workflow." },
+    { "id": "PC3", "text": "R.I.O. clearly explained the consequences of approving vs. rejecting an action." },
+    { "id": "PC4", "text": "Risk indicators and evidence links helped me decide when to intervene." }
+  ],
+  "sus_items": [
+    { "id": "SUS01", "polarity": "positive", "text": "I think that I would like to use this oversight interface frequently." },
+    { "id": "SUS02", "polarity": "negative", "text": "I found the interface unnecessarily complex." },
+    { "id": "SUS03", "polarity": "positive", "text": "I thought the interface was easy to use." },
+    { "id": "SUS04", "polarity": "negative", "text": "I think that I would need technical support to use this system." },
+    { "id": "SUS05", "polarity": "positive", "text": "I found the plan, timeline, approval gate, and trust panel well integrated." },
+    { "id": "SUS06", "polarity": "negative", "text": "I thought there was too much inconsistency in the interface." },
+    { "id": "SUS07", "polarity": "positive", "text": "Most people would learn to use this oversight interface very quickly." },
+    { "id": "SUS08", "polarity": "negative", "text": "I found the interface cumbersome to use." },
+    { "id": "SUS09", "polarity": "positive", "text": "I felt confident interpreting R.I.O.'s risk and approval states." },
+    { "id": "SUS10", "polarity": "negative", "text": "I needed to learn many things before I could get going with the interface." }
+  ],
+  "nasa_tlx_subscales": [
+    { "id": "mental_demand", "label": "Mental Demand (0 = Very Low, 100 = Very High)" },
+    { "id": "physical_demand", "label": "Physical Demand (0 = Very Low, 100 = Very High)" },
+    { "id": "temporal_demand", "label": "Temporal Demand (0 = Very Low, 100 = Very High)" },
+    { "id": "performance", "label": "Performance Failure Risk (0 = Perfect Success, 100 = Failure)" },
+    { "id": "effort", "label": "Effort (0 = Very Low, 100 = Very High)" },
+    { "id": "frustration", "label": "Frustration (0 = Very Low, 100 = Very High)" }
+  ]
+}
