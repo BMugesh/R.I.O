@@ -221,7 +221,9 @@ def apply_deterministic_policy(draft: PlanDraft) -> ExecutionPlan:
     draft_steps = list(draft.steps[:max_steps])
 
     has_gate = any(POLICY_CATALOG[s.action_id].requires_approval for s in draft_steps)
-    if not has_gate and len(draft_steps) < max_steps:
+    if not has_gate:
+        if len(draft_steps) >= max_steps:
+            draft_steps = draft_steps[: max_steps - 1]
         insert_idx = max(0, len(draft_steps) - 1)
         gate_step = type(draft_steps[0])(
             action_id=SandboxActionId.EXPORT_REPORT,
@@ -233,6 +235,23 @@ def apply_deterministic_policy(draft: PlanDraft) -> ExecutionPlan:
         draft_steps.insert(insert_idx, gate_step)
         if len(draft_steps) > insert_idx + 1:
             draft_steps[insert_idx + 1].depends_on_indices = [insert_idx]
+
+    # Ensure at least one post-gate completion step exists after the final gated step
+    # so human approval/rejection always governs downstream finalization.
+    if draft_steps and POLICY_CATALOG[draft_steps[-1].action_id].requires_approval:
+        if len(draft_steps) >= max_steps:
+            gate_step = draft_steps[-1]
+            draft_steps = draft_steps[: max_steps - 2] + [gate_step]
+        gate_idx = len(draft_steps) - 1
+        draft_steps.append(
+            type(draft_steps[0])(
+                action_id=SandboxActionId.COMPLETE_SIMULATED_EXPORT,
+                title="Complete simulated export",
+                description="Record the final simulated artifact inside ephemeral session memory.",
+                reasoning_summary="Completes the simulated workflow only after explicit human approval.",
+                depends_on_indices=[gate_idx],
+            )
+        )
 
     plan_steps: List[PlanStep] = []
     gated_step_id: Optional[str] = None
@@ -250,11 +269,7 @@ def apply_deterministic_policy(draft: PlanDraft) -> ExecutionPlan:
 
         if spec.requires_approval:
             gated_step_id = step_id
-        elif (
-            step_draft.action_id == SandboxActionId.COMPLETE_SIMULATED_EXPORT
-            and gated_step_id
-            and gated_step_id not in depends_on
-        ):
+        elif gated_step_id and gated_step_id not in depends_on:
             depends_on.append(gated_step_id)
 
         plan_steps.append(

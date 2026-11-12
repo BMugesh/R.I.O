@@ -1044,3 +1044,50 @@ def test_groq_404_retries_default_flagship_model(monkeypatch):
     assert seen_models == ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
     assert data["plan"]["planner_source"] == "groq_assisted"
     assert data["plan"]["planner_model"] == "openai/gpt-oss-120b"
+
+
+def test_policy_appends_post_gate_step_when_llm_ends_on_gate(monkeypatch):
+    """If an LLM plan omits complete_simulated_export after export_report, policy appends it so reject skips it."""
+    import engine as demo_engine
+    import schemas as demo_schemas
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    draft = demo_planner.PlanDraft(
+        goal_summary="Compare docs and export",
+        planner_source="groq_assisted",
+        planner_model="openai/gpt-oss-120b",
+        steps=[
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.ANALYSE_TASK,
+                title="Parse",
+                description="Parse request",
+                reasoning_summary="Parses task.",
+                depends_on_indices=[],
+            ),
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.READ_SAMPLE_DOCUMENTS,
+                title="Read",
+                description="Read docs",
+                reasoning_summary="Reads docs.",
+                depends_on_indices=[0],
+            ),
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.GENERATE_COMPARISON,
+                title="Compare",
+                description="Compare docs",
+                reasoning_summary="Synthesizes docs.",
+                depends_on_indices=[1],
+            ),
+            demo_planner.PlannedStepDraft(
+                action_id=demo_schemas.SandboxActionId.EXPORT_REPORT,
+                title="Export",
+                description="Export report",
+                reasoning_summary="Requests export.",
+                depends_on_indices=[2],
+            ),
+        ],
+    )
+    plan = demo_engine.apply_deterministic_policy(draft)
+    assert plan.steps[-2].action_id == demo_schemas.SandboxActionId.EXPORT_REPORT
+    assert plan.steps[-1].action_id == demo_schemas.SandboxActionId.COMPLETE_SIMULATED_EXPORT
+    assert plan.steps[-2].step_id in plan.steps[-1].depends_on
