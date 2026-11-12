@@ -1,0 +1,48 @@
+services:
+  public-demo-api:
+    build:
+      context: .
+      dockerfile: apps/public-demo/Dockerfile
+    image: rio-public-demo:latest
+    container_name: rio-public-demo-api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      PYTHONUNBUFFERED: "1"
+      SESSION_TTL_SECONDS: "${SESSION_TTL_SECONDS:-1800}"
+      DEMO_STEP_DELAY_MS: "${DEMO_STEP_DELAY_MS:-150}"
+      DEMO_ALLOWED_ORIGINS: "${DEMO_ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      GROQ_MODEL: "${GROQ_MODEL:-llama-3.3-70b-versatile}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  public-demo-web:
+    build:
+      context: ./apps/public-demo-web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000}"
+    image: rio-public-demo-web:latest
+    container_name: rio-public-demo-web
+    ports:
+      - "8080:8080"
+    depends_on:
+      public-demo-api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
