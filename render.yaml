@@ -31,7 +31,6 @@ services:
   - type: web
     name: rio-public-demo-web
     runtime: static
-    plan: free
     rootDir: apps/public-demo-web
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
